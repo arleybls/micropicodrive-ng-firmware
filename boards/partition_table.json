@@ -1,0 +1,74 @@
+{
+    "version": [1, 0],
+    "unpartitioned": {
+        "families": ["absolute"],
+        "permissions": {
+            "secure": "rw",
+            "nonsecure": "rw",
+            "bootloader": "rw"
+        }
+    },
+    "partitions": [
+        {
+            "name": "fw_a",
+            "id": "0x0000000000000001",
+            "size": "1536K",
+            "families": ["rp2350-arm-s"],
+            "permissions": {
+                "secure": "rw",
+                "nonsecure": "rw",
+                "bootloader": "rw"
+            }
+        },
+        {
+            "name": "fw_b",
+            "id": "0x0000000000000002",
+            "size": "1536K",
+            "families": ["rp2350-arm-s"],
+            "link": ["a", 0],
+            "permissions": {
+                "secure": "rw",
+                "nonsecure": "rw",
+                "bootloader": "rw"
+            }
+        },
+        {
+            "name": "cyw43-fw",
+            "id": "0x776966696669726d",
+            "start": "3080K",
+            "size": "256K",
+            "families": ["cyw43-firmware"],
+            "permissions": {
+                "secure": "rw",
+                "nonsecure": "rw",
+                "bootloader": "rw"
+            },
+            "ignored_during_riscv_boot": true,
+            "no_reboot_on_uf2_download": true
+        },
+        {
+            "start": "3080K",
+            "size": "256K",
+            "families": ["cyw43-firmware"],
+            "link": ["a", 2],
+            "permissions": {
+                "secure": "rw",
+                "nonsecure": "rw",
+                "bootloader": "rw"
+            },
+            "ignored_during_riscv_boot": true,
+            "no_reboot_on_uf2_download": true
+        },
+        {
+            "name": "data",
+            "id": "0x0000000000000003",
+            "size": "512K",
+            "families": ["data"],
+            "permissions": {
+                "secure": "rw",
+                "nonsecure": "rw",
+                "bootloader": "rw"
+            }
+        }
+    ]
+}

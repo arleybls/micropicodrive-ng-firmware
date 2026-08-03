@@ -1,0 +1,22 @@
+// GATT database for the BLE OTA service, vendored from the UIExt sandbox
+// (commit 057b1ae). Local change: GAP device name "UIExt" -> "MicroPicoDrive"
+// (identity per PORT_PLAN decision 8; service UUIDs unchanged so the
+// companion app works as-is).
+// All OTA characteristics require an authenticated (passkey-bonded) encrypted
+// link — enforcement of the plan's "bonded peers only" rule (§3.6).
+PRIMARY_SERVICE, GAP_SERVICE
+CHARACTERISTIC, GAP_DEVICE_NAME, READ, "MicroPicoDrive"
+
+PRIMARY_SERVICE, GATT_SERVICE
+CHARACTERISTIC, GATT_SERVICE_CHANGED, READ,
+
+// UIExt OTA service
+PRIMARY_SERVICE, 7A0B0001-D5A9-4B7C-9F2A-5B1E6F0C4D10
+// Device info: version string etc. (read)
+CHARACTERISTIC, 7A0B0002-D5A9-4B7C-9F2A-5B1E6F0C4D10, READ | DYNAMIC | AUTHENTICATION_REQUIRED
+// Control: START / ABORT (write with response) + indications for replies
+CHARACTERISTIC, 7A0B0003-D5A9-4B7C-9F2A-5B1E6F0C4D10, WRITE | DYNAMIC | AUTHENTICATION_REQUIRED
+// Data: sequenced firmware chunks (write without response)
+CHARACTERISTIC, 7A0B0004-D5A9-4B7C-9F2A-5B1E6F0C4D10, WRITE_WITHOUT_RESPONSE | DYNAMIC | AUTHENTICATION_REQUIRED
+// Status: progress / ACK / verdict notifications
+CHARACTERISTIC, 7A0B0005-D5A9-4B7C-9F2A-5B1E6F0C4D10, NOTIFY | AUTHENTICATION_REQUIRED

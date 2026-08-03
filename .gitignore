@@ -1,0 +1,27 @@
+build
+tools/__pycache__/
+
+# Local-only reference docs (owner's working notes) — deliberately untracked
+docs/
+
+# Build artefacts. Releases are published via GitHub Releases, not committed.
+dist/
+
+# Runtime device state written by the firmware, not source
+CONFIG.CFG
+
+# Device install / update scripts: local only, not published
+tools/install_lite.ps1
+tools/reinstall_lite.ps1
+tools/install_p4.ps1
+tools/ota_bletest.py
+
+# Boot-animation source assets and converters: local only
+images/
+
+# Local History extension snapshots (can contain copies of excluded files)
+.history/
+
+# Editor config: the Pico extension generates it and pins local tool versions.
+# Recommended extensions are documented in README.md instead.
+.vscode/
