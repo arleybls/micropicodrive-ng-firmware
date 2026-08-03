@@ -1444,8 +1444,8 @@ static bool run_config_menu(void) {
                     case CFG_LEDTEST: {
                         // Bench probe for the activity LED (GP10 / UI_LD_ACTIVITY):
                         // re-inits the pad itself and drives it directly, so it
-                        // answers "is the LED path alive?" independently of
-                        // init_leds() and of the UI state machine.
+                        // answers "is the LED path alive?" independently of the
+                        // hot-plug pin setup and of the UI state machine.
                         uiext_ota_status("LED Test", "Blinking 5s");
                         gpio_init(PIN_LED_ACTIVITY);
                         gpio_set_dir(PIN_LED_ACTIVITY, GPIO_OUT);

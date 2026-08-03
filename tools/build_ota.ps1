@@ -12,13 +12,13 @@
 # and the same three files for version <M.m+1>, so an OTA upload can be
 # tested immediately (device only accepts strictly newer versions over BLE).
 #
-# Usage:  powershell -File tools\build_ota.ps1 [-Major 2] [-Minor 0] [-Patch 0]
+# Usage:  powershell -File tools\build_ota.ps1 [-Major 2] [-Minor 6] [-Patch 0]
 # Three-part versions since v2.5.1. The sealed IMAGE_DEF and the BLE wire
 # only carry major/minor u16, so ordering there uses minor*100+patch
 # (patch 0-99); displays and filenames use the full M.m.p.
 param(
     [int]$Major = 2,
-    [int]$Minor = 0,
+    [int]$Minor = 6,
     [int]$Patch = 0
 )
 if ($Patch -lt 0 -or $Patch -gt 98) { throw "Patch must be 0-98 (99 is reserved for the auto OTA-test build)" }

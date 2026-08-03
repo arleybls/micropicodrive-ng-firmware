@@ -27,10 +27,15 @@
 #include "ota_ble.h"            //reboot-to-Connect magic + Connect mode
 #include "hardware/watchdog.h"  //watchdog_hw->scratch
 #endif
+#include "hardware/irq.h"       //IO_IRQ_BANK0 (hot-plug detect IRQ)
+#include "hardware/sync.h"      //save_and_disable_interrupts (presence commit)
 
 #define LED_ON(LED) gpio_put(LED, true)
 #define LED_OFF(LED) gpio_put(LED, false)
-#define IS_UI_DISCONNECTED() gpio_get(PIN_UI_DETECT)
+//Debounced presence from the hot-plug supervisor below — NOT a raw pin read.
+//The staggered edge connector makes the raw signal lie in both directions:
+//it asserts before VCC/signals are seated and breaks after they are gone.
+#define IS_UI_DISCONNECTED() (!cartPresent)
 #define IN_FOLDER (fno.fattrib & AM_DIR)
 
 #define CONCAT(DEST, SOURCE) sprintf(&DEST[strlen(DEST)],"/%s", SOURCE)
@@ -47,6 +52,21 @@ uint8_t currentSector = 0;
 bool mdInUse = false;
 
 CARTRIDGE_FORMAT cfInserted = NONE;
+
+// --- Cartridge hot-plug supervisor state ---
+//Finger stagger (mating order): GND and UI_DETECT are full length and mate
+//FIRST; +3V3 and all signal fingers mate LAST. So insertion is debounced
+//(detect low for 250 ms continuously) before any cartridge-facing pin is
+//driven, and removal (detect high, even one edge) tri-states everything from
+//a GPIO IRQ — by then power and signals are already gone.
+#define CART_DEBOUNCE_MS   250
+#define SD_ERR_BURST_LIMIT 3   //consecutive FatFs failures = surprise removal
+
+static volatile bool     cartPresent = false;       //debounced presence
+static volatile bool     cartSdInvalid = false;     //removal seen: SD state is stale
+static volatile bool     cartReinitPending = false; //restart from IDLE on replug
+static volatile uint32_t cartLowSinceMs = 0;        //0 = not sampling a low
+static int               sdErrStreak = 0;           //burst detector counter
 
 // --- Directory menu state ---
 //Listing cap per folder: entries beyond it are dropped in FAT order (BEFORE
@@ -111,7 +131,12 @@ FRESULT sd_fs_mount(void)
 
 static bool mount_sd(void)
 {
-    return sd_fs_mount() == FR_OK;
+    bool ok = sd_fs_mount() == FR_OK;
+    if(ok)
+        sdErrStreak = 0; //burst detector: any success ends the streak. A
+                         //failed mount does NOT count — an empty slot fails
+                         //the same way and is a normal waiting state.
+    return ok;
 }
 
 //Sandbox sd_menu API: card present = mount succeeds (retried on each call).
@@ -125,6 +150,11 @@ bool sd_menu_available(void)
 //if it re-ran the full card init.
 bool sd_menu_card_present(void)
 {
+    //Cartridge gone ⇒ card gone. Answer from the debounced detect state
+    //instead of probing the (tri-stated) SPI lines: this is what lets the
+    //blocking menu loop fall out via its SD_GONE path after a hot removal.
+    if(IS_UI_DISCONNECTED())
+        return false;
     sd_card_t *sd = sd_get_by_num(0);
     return sd && sd->sd_test_com && sd->sd_test_com(sd);
 }
@@ -133,6 +163,231 @@ bool sd_menu_card_present(void)
 bool cartridge_busy(void)
 {
     return cfInserted != NONE || mdInUse;
+}
+
+// --- Cartridge hot-plug supervisor ---
+
+//Tri-state one cartridge-facing pin: SIO input, no pulls. Nothing may drive
+//a line toward the connector while the cartridge is absent or half-seated
+//(back-powering through the display/SD clamp diodes).
+static void cart_pin_tristate(uint pin)
+{
+    gpio_init(pin);
+    gpio_disable_pulls(pin);
+}
+
+//Tri-state every cartridge-facing pin: display SPI, SD SPI, LED. The buttons
+//keep their pull-ups (the schematic expects them, and a floating button line
+//reads as ghost presses in the blocking menu loops); PIN_UI_DETECT keeps its
+//pull-up. ISR-safe: pure per-pin register writes.
+static void cart_pins_tristate(void)
+{
+    cart_pin_tristate(PIN_LED_ACTIVITY);
+    cart_pin_tristate(SPI_TFT_CS);
+    cart_pin_tristate(SPI_TFT_DC);
+    cart_pin_tristate(UIEXT_TFT_SCK);
+    cart_pin_tristate(UIEXT_TFT_MOSI);
+
+    sd_card_t *sd = sd_get_by_num(0);
+    cart_pin_tristate(sd->spi_if_p->spi->miso_gpio);
+    cart_pin_tristate(sd->spi_if_p->spi->mosi_gpio);
+    cart_pin_tristate(sd->spi_if_p->spi->sck_gpio);
+    cart_pin_tristate(sd->spi_if_p->ss_gpio);
+    //MISO keeps its pull-up (schematic-expected: the library enables it for
+    //normal operation). Left floating it can read low, and 0x00 on DO means
+    //"card present and busy" to the driver — sd_spi_test_com then reports
+    //the card present forever and the menu loop never exits after a removal.
+    //Pulled up, an absent card reads 0xFF and every driver loop times out.
+    gpio_pull_up(sd->spi_if_p->spi->miso_gpio);
+}
+
+//Reconnect the cartridge-facing pins once presence is confirmed. The TFT
+//pins are NOT restored here: setup_tft() reconfigures them from scratch when
+//the state machine reaches INIT_SCREEN. The SD pins MUST be restored here —
+//my_spi_init runs once per boot (spi_p->initialized) and re-running it would
+//re-claim its DMA channels, so after a tri-state nobody else re-muxes them.
+//Mirrors my_spi_init/sd_spi_ctor: SPI function + fast SCK slew + MISO
+//pull-up, CS as SIO output idling high.
+static void cart_pins_connect(void)
+{
+    gpio_init(PIN_LED_ACTIVITY);
+    gpio_set_dir(PIN_LED_ACTIVITY, true);
+
+    sd_card_t *sd = sd_get_by_num(0);
+    //Full SPI0 block reset: a removal can tri-state the pins mid-transaction,
+    //and a peripheral left with residual RX FIFO bytes shifts every later
+    //response — the driver then retries forever against misaligned garbage.
+    //my_spi_init runs once per boot, so nobody else ever resets it (the
+    //display never hits this: setup_tft re-runs spi_init on ITS block every
+    //time). 100 kHz mode-0 mirrors my_spi_init; the driver re-selects its
+    //own baud rate per phase.
+    spi_init(sd->spi_if_p->spi->hw_inst, 100 * 1000);
+    gpio_set_function(sd->spi_if_p->spi->miso_gpio, GPIO_FUNC_SPI);
+    gpio_set_function(sd->spi_if_p->spi->mosi_gpio, GPIO_FUNC_SPI);
+    gpio_set_function(sd->spi_if_p->spi->sck_gpio, GPIO_FUNC_SPI);
+    gpio_set_slew_rate(sd->spi_if_p->spi->sck_gpio, GPIO_SLEW_RATE_FAST);
+    gpio_pull_up(sd->spi_if_p->spi->miso_gpio); //SD DO needs a pull-up
+    gpio_init(sd->spi_if_p->ss_gpio);
+    gpio_put(sd->spi_if_p->ss_gpio, 1);         //idle-high before output
+    gpio_set_dir(sd->spi_if_p->ss_gpio, true);
+    gpio_put(sd->spi_if_p->ss_gpio, 1);
+}
+
+//Immediate disconnect: tri-state everything, mark absent, re-arm the
+//insertion debounce. Called from the detect IRQ and the SD error-burst path.
+static void cart_disconnect(void)
+{
+    cart_pins_tristate();
+    cartPresent = false;
+    cartSdInvalid = true;
+    cartReinitPending = true;
+    cartLowSinceMs = 0;
+}
+
+//Removal confirm window. The detect line glitches — it always has (the
+//updaters defend against "a PIN_UI_DETECT glitch"), and its finger neighbors
+//SD MISO, so SPI edges couple into a high-Z line held by a weak pull-up. The
+//old polled reads shrugged those spikes off; an edge IRQ latches every one,
+//and each false disconnect tears down the whole UI session. So a high is
+//only a removal if it SUSTAINS: sample for 2 ms and bail on the first low.
+//A real removal keeps the line high forever (pull-up, cartridge gone), so
+//reaction stays "within a few ms" as specified.
+#define CART_REMOVE_CONFIRM_US 2000
+
+static bool cart_detect_high_confirmed(void)
+{
+    uint64_t until = time_us_64() + CART_REMOVE_CONFIRM_US;
+    while(time_us_64() < until)
+        if(!gpio_get(PIN_UI_DETECT))
+            return false;
+    return true;
+}
+
+//Detect IRQ (raw handler, core 1): removal must tri-state within a few ms
+//even while a blocking menu or a save loop runs, so it cannot wait for the
+//polled state machine. Rising edge only — insertion is polled and debounced.
+//The confirm spin runs at IRQ level: core 1 is UI-only, and it only happens
+//on a rising edge (rare), so blocking this core's IRQs for 2 ms is fine.
+static void cart_detect_irq(void)
+{
+    if(gpio_get_irq_event_mask(PIN_UI_DETECT) & GPIO_IRQ_EDGE_RISE)
+    {
+        gpio_acknowledge_irq(PIN_UI_DETECT, GPIO_IRQ_EDGE_RISE);
+        if(cart_detect_high_confirmed())
+            cart_disconnect();
+    }
+}
+
+//Burst detector for FatFs operations on a mounted card. The stagger breaks
+//detect LAST, so a rip-out cuts power/signals while detect may still read
+//low for a moment — and a badly seated cartridge looks identical. Treat a
+//run of consecutive SD failures as a probable surprise removal: tri-state
+//and re-arm the debounce. If detect still reads low, the normal insertion
+//sequence re-inits the display and remounts the card (recovering a reseat).
+static void sd_io_result(bool ok)
+{
+    if(ok)
+        sdErrStreak = 0;
+    else if(++sdErrStreak >= SD_ERR_BURST_LIMIT)
+        cart_disconnect();
+}
+
+//One-time hot-plug setup, on core 1 (the IRQ must fire on the UI core).
+//Every cartridge-facing pin starts tri-stated: the cartridge may be absent
+//or half-seated at power-on. Raw handler: coexists with the CYW43 driver's
+//own raw GPIO handlers on the mainline board.
+static void cart_hotplug_init(void)
+{
+    cart_pins_tristate();
+    gpio_add_raw_irq_handler(PIN_UI_DETECT, cart_detect_irq);
+    gpio_set_irq_enabled(PIN_UI_DETECT, GPIO_IRQ_EDGE_RISE, true);
+    irq_set_enabled(IO_IRQ_BANK0, true);
+}
+
+//Hot-plug supervisor tick, every UI loop pass — INCLUDING while the QL uses
+//the drive (the mdInUse gate freezes only the menus, not removal safety).
+static void cart_hotplug_task(void)
+{
+    //Poll-backup for the removal IRQ: a bounce edge can race the presence
+    //commit below, ending with cartPresent set while the pins are already
+    //tri-stated and the rising edge consumed — a state no future edge would
+    //heal, since re-admission needs cartPresent false. Re-checking the raw
+    //pin every pass makes any such state converge to a clean disconnect.
+    //Same 2 ms confirm as the IRQ: a coupled spike is not a removal.
+    if(cartPresent && gpio_get(PIN_UI_DETECT) && cart_detect_high_confirmed())
+        cart_disconnect();
+
+    if(cartSdInvalid)
+    {
+        //Thread-context cleanup after a disconnect. Tri-state again: the IRQ
+        //may have raced a setup_tft/driver call that re-muxed a pin after
+        //the ISR cleared it (task and UI code share core 1, so by now any
+        //such call has finished). Then invalidate the SD driver state and
+        //mark the volume unmounted — the card lost power before detect
+        //broke, so both describe a dead card (same recipe as sd_fs_mount).
+        cart_pins_tristate();
+        sd_card_t *sd = sd_get_by_num(0);
+        if(sd)
+        {
+            sd->state.m_Status |= STA_NOINIT;
+            sd->state.card_type = SDCARD_NONE;
+        }
+        f_mount(NULL, "", 0);
+        sdErrStreak = 0;
+        cartSdInvalid = false;
+    }
+
+    if(cartPresent)
+        return;
+
+    //Insertion debounce: detect mates FIRST, so the first low edge says
+    //nothing about VCC or the signal fingers. Require CART_DEBOUNCE_MS of
+    //continuous low before driving anything toward the connector.
+    if(gpio_get(PIN_UI_DETECT))
+    {
+        cartLowSinceMs = 0;
+        return;
+    }
+
+    uint32_t now = to_ms_since_boot(get_absolute_time());
+    if(cartLowSinceMs == 0)
+    {
+        cartLowSinceMs = now ? now : 1;
+        return;
+    }
+    if(now - cartLowSinceMs < CART_DEBOUNCE_MS)
+        return;
+
+    //Commit with IRQs off and the raw pin re-checked: a bounce edge right at
+    //the debounce boundary could otherwise interleave the removal ISR with
+    //this commit — ISR tri-states and clears presence, commit then sets it
+    //back — leaving cartPresent true with dead pins and no future edge to
+    //recover on. An edge arriving during the masked window stays latched in
+    //the IO bank and the ISR runs a clean disconnect right after restore.
+    uint32_t irq_state = save_and_disable_interrupts();
+    bool admitted = !gpio_get(PIN_UI_DETECT);
+    if(admitted)
+    {
+        cart_pins_connect();
+        sdErrStreak = 0;
+        cartPresent = true;
+        //Display init + SD mount follow through the state machine as before:
+        //IDLE → DELAY (500 ms panel settle) → INIT_SCREEN → WELCOME/mount.
+    }
+    else
+        cartLowSinceMs = 0;
+    restore_interrupts(irq_state);
+
+    if(admitted)
+    {
+        //Insertion-accepted signature: one short blink the moment the
+        //debounce admits the cartridge. User feedback, and a bench
+        //diagnostic — a blink under a dead display separates "firmware
+        //never re-admitted the cartridge" from "panel failed to re-init".
+        LED_ON(PIN_LED_ACTIVITY);
+        sleep_ms(100);
+        LED_OFF(PIN_LED_ACTIVITY);
+    }
 }
 
 //Current browse directory for thumb/sidecar path building (sandbox sd_menu
@@ -441,9 +696,20 @@ void process_md_to_ui_event(void* event)
 }
 
 //Initialize the ST7735 SPI screen (RC auto-reset + SWRESET â€” cannot fail)
+//Re-insertion is less forgiving than power-on: a quick hot swap can leave
+//the panel's RC reset capacitor charged, so the panel powers up with NO
+//hardware reset and a possibly desynced serial interface. Running the full
+//init twice recovers it — the first pass's CS toggling resyncs the
+//interface and issues SWRESET, the second lands on a properly reset panel.
+//Boot keeps the single fast init (QL auto-boot race, UX review X15).
+static bool screenInitBefore = false;
+
 bool init_screen()
 {
+    if(screenInitBefore)
+        setup_tft();
     setup_tft();
+    screenInitBefore = true;
     return true;
 }
 
@@ -808,6 +1074,16 @@ void check_delay()
 //Process the user interface state machine
 void process_user_interface()
 {
+    //Replug after a disconnect (removal IRQ or SD error burst): restart from
+    //IDLE so INIT_SCREEN re-runs the panel init — mandatory after the panel
+    //lost power, and the machine may have been stuck inside a blocking menu
+    //when the removal happened, past its own IS_UI_DISCONNECTED checks.
+    if(cartReinitPending && !IS_UI_DISCONNECTED())
+    {
+        cartReinitPending = false;
+        uiState = IDLE;
+    }
+
     switch(uiState)
     {
         case IDLE:
@@ -980,6 +1256,7 @@ void process_user_interface()
             {
                 if(f_opendir(&dir, currentPath))
                 {
+                    sd_io_result(false);
                     ui_error("Open failed");
                     sleep_ms(2000);
                     uiState = SHOW_WAITING_SD_CARD;
@@ -991,6 +1268,7 @@ void process_user_interface()
                     {
                         if(f_readdir(&dir, &fno))
                         {
+                            sd_io_result(false);
                             ui_error("Read failed");
                             sleep_ms(2000);
                             uiState = SHOW_WAITING_SD_CARD;
@@ -1036,6 +1314,7 @@ void process_user_interface()
 
                     if(uiState != SHOW_WAITING_SD_CARD)
                     {
+                        sd_io_result(true);
                         qsort(dir_entries, dir_count, sizeof(DirEntry), cmp_dir_entry);
 
                         has_up = (strlen(currentPath) > 0);
@@ -1250,6 +1529,7 @@ void process_user_interface()
                 }
 
                 LED_OFF(PIN_LED_ACTIVITY);
+                sd_io_result(res);
 
                 if(!res)
                 {
@@ -1359,6 +1639,10 @@ void process_user_interface()
                     }
 
                     LED_OFF(PIN_LED_ACTIVITY);
+                    //Removal mid-save lands here as a failed save: the RAM
+                    //image and the dirty flag are kept (same guard as a
+                    //power failure), and the burst detector sees the error.
+                    sd_io_result(res);
 
                     if(res)
                     {
@@ -1421,13 +1705,6 @@ void process_user_interface()
             break;
 
     }
-}
-
-//Initialize UI leds
-void init_leds()
-{
-    gpio_init(PIN_LED_ACTIVITY);
-    gpio_set_dir(PIN_LED_ACTIVITY, true);
 }
 
 //Initialize UI buttons
@@ -1709,11 +1986,15 @@ void RunUserInterface()
     event_machine_init(&mdToUiEventQueue, &process_md_to_ui_event, sizeof(mtuevent_t), 16);
     mtuevent_t mtuevtBuffer;
 
-    init_leds();
-    init_buttons();
+    init_buttons();     //buttons + PIN_UI_DETECT pull-up, before the IRQ arms
+    cart_hotplug_init(); //tri-state cartridge pins (LED included), arm detect IRQ
 
     while(true)
     {
+        //Hot-plug supervisor first: it must run even while the QL is using
+        //the drive (the mdInUse gate below freezes only the menus).
+        cart_hotplug_task();
+
         event_process_queue(&mdToUiEventQueue, &mtuevtBuffer, 16);
 
         //A sticky overflow means events were lost. With a cartridge inserted

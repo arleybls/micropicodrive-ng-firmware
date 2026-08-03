@@ -14,10 +14,10 @@
 #                              correct USB BOOTSEL / first-install image
 #                              (copy it to the RPI-RP2 drive)
 #
-# Usage:  powershell -File tools\build_lite.ps1 [-Major 2] [-Minor 1] [-Patch 0]
+# Usage:  powershell -File tools\build_lite.ps1 [-Major 2] [-Minor 6] [-Patch 0]
 param(
     [int]$Major = 2,
-    [int]$Minor = 1,
+    [int]$Minor = 6,
     [int]$Patch = 0
 )
 # Same 0-99 ceiling as mainline. Lite has no A/B seal so nothing forces it,

@@ -120,8 +120,10 @@ add_executable(MicroPicoDrive ${MPD_SOURCES})
 # Firmware identity: MicroPicoDrive starts at v2.0 with the new UI stack.
 # Three-part versions since v2.5.1; the A/B seal and the BLE wire carry only
 # major/minor u16, so ordering uses minor*100+patch there (patch 0-99).
+# Lite and mainline share ONE version line since v2.6.0 (they build from the
+# same tree, so every release covers both products).
 set(MPD_FW_VERSION_MAJOR 2 CACHE STRING "Firmware major version")
-set(MPD_FW_VERSION_MINOR 0 CACHE STRING "Firmware minor version")
+set(MPD_FW_VERSION_MINOR 6 CACHE STRING "Firmware minor version")
 set(MPD_FW_VERSION_PATCH 0 CACHE STRING "Firmware patch version")
 target_compile_definitions(MicroPicoDrive PRIVATE
         ${MPD_TFT_DEFINES}
