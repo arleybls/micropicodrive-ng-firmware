@@ -116,6 +116,28 @@ Notes:
 System Tools also holds an SD card check, a System Info page, and an LED test
 that blinks the activity LED for five seconds.
 
+## Hot-swap handling
+
+The cartridge can be inserted and removed with the QL powered. The board edge
+has staggered fingers (see the
+[hardware repository](https://github.com/arleybls/micropicodrive-ng-hardware)):
+GND and the detect line mate first, +3V3 second, and the signal fingers last.
+The firmware supervises the detect line (GPIO 15, low = cartridge present)
+around that mating order:
+
+- **Insertion** is debounced: the detect line must stay low for 250 ms
+  continuously before any cartridge-facing pin is driven and the display and
+  SD card are initialised. The first low edge only proves the longest finger
+  touched — not that power and signals are seated.
+- **Removal** is acted on immediately: a rising edge on detect (confirmed
+  against glitches over a short window) tri-states every cartridge-facing pin
+  within a few milliseconds, marks the SD volume unmounted, and re-arms the
+  insertion debounce.
+- **Rip-out backup**: because detect breaks last, a fast pull can cut power and
+  signals while detect still reads present. A streak of consecutive SD errors
+  is therefore treated as a probable removal — the lines are tri-stated and
+  presence is re-evaluated, which also recovers a badly seated cartridge.
+
 ## Firmware update
 
 The device updates itself. You do not need a programmer, and on the normal
