@@ -12,13 +12,13 @@
 # and the same three files for version <M.m+1>, so an OTA upload can be
 # tested immediately (device only accepts strictly newer versions over BLE).
 #
-# Usage:  powershell -File tools\build_ota.ps1 [-Major 2] [-Minor 6] [-Patch 0]
+# Usage:  powershell -File tools\build_ota.ps1 [-Major 2] [-Minor 7] [-Patch 0]
 # Three-part versions since v2.5.1. The sealed IMAGE_DEF and the BLE wire
 # only carry major/minor u16, so ordering there uses minor*100+patch
 # (patch 0-99); displays and filenames use the full M.m.p.
 param(
     [int]$Major = 2,
-    [int]$Minor = 6,
+    [int]$Minor = 7,
     [int]$Patch = 0
 )
 if ($Patch -lt 0 -or $Patch -gt 98) { throw "Patch must be 0-98 (99 is reserved for the auto OTA-test build)" }
@@ -82,6 +82,13 @@ Write-Host "partition_table.uf2 written"
 
 BuildOne $Major $Minor $Patch
 BuildOne $Major $Minor ($Patch + 1)   # strictly-newer set for OTA testing
+
+# Fixed-name copy of the BASE version's manifest. The companion app discovers
+# "latest" exclusively via releases/latest/download/manifest-rp2350.json, so
+# every GitHub release MUST carry this asset (byte-identical to the versioned
+# manifest). Generated here so assembling a release cannot forget it.
+Copy-Item "$dist\MicroPicoDrive_v$Major.$Minor.$Patch.json" "$dist\manifest-rp2350.json" -Force
+Write-Host "manifest-rp2350.json written (copy of v$Major.$Minor.$Patch manifest)"
 
 # CYW43 Wi-Fi/BT firmware for its dedicated partition (first-install only;
 # built by pico_use_wifi_firmware_partition alongside the app)

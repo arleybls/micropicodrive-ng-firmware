@@ -37,6 +37,9 @@ bool ota_sd_changed(void);
 // next boot to enter Connect mode directly. Survives the watchdog reset,
 // cleared on power-on and after consumption (main()).
 #define OTA_REBOOT_TO_CONNECT_MAGIC 0x4D504443u   // "MPDC"
+// App-driven OTA ("updatemode" op, companion app OTA_UPDATE.md / ADR 0001):
+// same mechanism, next boot enters Update Firmware mode directly.
+#define OTA_REBOOT_TO_UPDATE_MAGIC  0x4D504455u   // "MPDU"
 
 // Blocking UI modes, called from the config menu. Each drives the display
 // via the uiext_ota_* helpers and returns when done/cancelled/timed out.

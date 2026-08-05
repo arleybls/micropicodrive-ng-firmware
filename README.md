@@ -62,7 +62,7 @@ cmake -DPICO_BOARD=pico2_w   ->  MicroPicoDrive        (Raspberry Pi Pico 2 W, R
 | BOOTSEL from the menu | yes, in System Tools | no, the A/B slots cover recovery |
 | Menu scroll animation | off | on |
 | Settings storage | last flash sector | data partition |
-| Version line | 2.6.x (shared) | 2.6.x (shared) |
+| Version line | shared, v2.6.0+ | shared, v2.6.0+ |
 | Static RAM used | 217,100 bytes of a 262,144 byte region | 291,428 bytes |
 
 The differences come from two constraints rather than from taste.
@@ -219,8 +219,8 @@ the board explicitly, which matters because `PICO_BOARD` is a CMake cache
 variable and the build directories persist between runs.
 
 ```powershell
-powershell -File tools\build_lite.ps1 -Major 2 -Minor 6 -Patch 0
-powershell -File tools\build_ota.ps1  -Major 2 -Minor 6 -Patch 0
+powershell -File tools\build_lite.ps1 -Major 2 -Minor 7 -Patch 0
+powershell -File tools\build_ota.ps1  -Major 2 -Minor 7 -Patch 0
 ```
 
 Both builds share one version line since v2.6.0: a release always covers both

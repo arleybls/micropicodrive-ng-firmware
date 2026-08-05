@@ -1268,9 +1268,11 @@ static void build_info_json(void) {
         }
     }
     s_info_len = snprintf(s_info_json, sizeof(s_info_json),
-        "{\"name\":\"%s\",\"unitId\":\"%s\",\"fw\":\"%s\","
+        "{\"name\":\"%s\",\"unitId\":\"%s\",\"fw\":\"%s\",\"otaCapable\":%s,"
         "\"sd\":{\"inserted\":%s,\"freeBytes\":%llu,\"totalBytes\":%llu}}",
-        s_devname, uid, ota_fw_version_string(), inserted ? "true" : "false",
+        s_devname, uid, ota_fw_version_string(),
+        ota_partition_boot() ? "true" : "false",   // app greys out OTA without A/B
+        inserted ? "true" : "false",
         (unsigned long long)freeB, (unsigned long long)totB);
 }
 
@@ -1317,7 +1319,7 @@ static void process_command(void) {
     if (cartridge_busy() &&
         (!strcmp(op, "wbegin") || !strcmp(op, "delete") ||
          !strcmp(op, "rename") || !strcmp(op, "setlabel") ||
-         !strcmp(op, "reboot"))) {
+         !strcmp(op, "reboot") || !strcmp(op, "updatemode"))) {
         send_error(req_id, "EBUSY");
         return;
     }
@@ -1337,6 +1339,17 @@ static void process_command(void) {
         uiext_ota_status("Restarting", "");
         printf("[cmd] reboot in 500 ms\n");
         watchdog_hw->scratch[0] = OTA_REBOOT_TO_CONNECT_MAGIC;   // boot into Connect mode
+        watchdog_reboot(0, 0, 500);
+    } else if (!strcmp(op, "updatemode")) {
+        // App-driven OTA entry (companion app OTA_UPDATE.md / ADR 0001):
+        // reboot straight into Update Firmware mode. EBUSY guarded above like
+        // "reboot"; unavailable without A/B partitions — the app greys the
+        // feature out via otaCapable, this is the backstop.
+        if (!ota_partition_boot()) { send_error(req_id, "ENOTSUP"); return; }
+        send_response(req_id, (const uint8_t *)"{\"ok\":true}", 11, false);
+        uiext_ota_status("Restarting", "Update mode");
+        printf("[cmd] updatemode reboot in 500 ms\n");
+        watchdog_hw->scratch[0] = OTA_REBOOT_TO_UPDATE_MAGIC;
         watchdog_reboot(0, 0, 500);
     } else if (!strcmp(op, "identify")) {
         // §5 Pico Tools. The connect loop flashes the screen until the deadline.
@@ -1372,11 +1385,13 @@ static void process_command(void) {
         int tenths = temp_tenths();
         char b[128];
         int n = snprintf(b, sizeof(b),
-            "{\"uptimeS\":%lu,\"tempC\":%d.%d,\"freeHeapB\":%lu,\"fw\":\"%s\",\"slot\":\"%c\"}",
+            "{\"uptimeS\":%lu,\"tempC\":%d.%d,\"freeHeapB\":%lu,\"fw\":\"%s\",\"slot\":\"%c\","
+            "\"otaCapable\":%s}",
             (unsigned long)(to_ms_since_boot(get_absolute_time()) / 1000u),
             tenths / 10, tenths < 0 ? -(tenths % 10) : tenths % 10,
             (unsigned long)heap_free, ota_fw_version_string(),
-            s_active_slot == 1 ? 'B' : 'A');
+            s_active_slot == 1 ? 'B' : 'A',
+            ota_partition_boot() ? "true" : "false");
         send_response(req_id, (const uint8_t *)b, (uint32_t)n, false);
     } else if (!strcmp(op, "info")) {
         build_info_json();
@@ -2031,6 +2046,11 @@ void ota_run_update_mode(void) {
                 uiext_ota_status("Update Firmware", "Restarting...");
                 sleep_ms(400);
                 ble_down();
+                // App-driven flow (ADR 0001): the fresh firmware boots into
+                // Connect mode so the app can reconnect and verify the new
+                // version hands-free. Scratch survives the watchdog reset —
+                // the same property the "reboot" op relies on.
+                watchdog_hw->scratch[0] = OTA_REBOOT_TO_CONNECT_MAGIC;
                 watchdog_reboot(0, 0, 100);
                 while (true) tight_loop_contents();
             } else {

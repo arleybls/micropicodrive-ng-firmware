@@ -1134,6 +1134,16 @@ void process_user_interface()
                         (void)ota_sd_changed(); //listing gets built fresh below
                         uiState = SHOW_WAITING_SD_CARD;
                     }
+                    else if(watchdog_hw->scratch[0] == OTA_REBOOT_TO_UPDATE_MAGIC)
+                    {
+                        //App-driven OTA ("updatemode" op): straight into
+                        //Update Firmware mode, mirroring the Connect magic
+                        //above (a timeout there can park a file in .update).
+                        watchdog_hw->scratch[0] = 0;
+                        ota_run_update_mode();
+                        (void)ota_sd_changed();
+                        uiState = SHOW_WAITING_SD_CARD;
+                    }
                     else
 #endif
                     uiState = WELCOME;
