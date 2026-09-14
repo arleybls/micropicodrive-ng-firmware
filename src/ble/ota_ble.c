@@ -1290,6 +1290,10 @@ static int temp_tenths(void) {
 }
 
 // Parse and serve one JSON command from s_cmd_buf.
+// Wire protocol consumers: the companion app, tools/mdvtool.py and
+// tools/ota_bletest.py — any change to the op set, frame formats or error
+// codes here (or in the §5b push machinery) must be mirrored in those tools,
+// in docs/BLE_PROTOCOL.md, and in the companion repo's BLE_PROTOCOL.md.
 static void process_command(void) {
     char js[256];
     uint16_t jl;

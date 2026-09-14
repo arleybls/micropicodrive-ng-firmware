@@ -1,8 +1,10 @@
 build
 tools/__pycache__/
 
-# Local-only reference docs (owner's working notes) — deliberately untracked
-docs/
+# Local-only reference docs (owner's working notes) — deliberately untracked.
+# BLE_PROTOCOL.md is the exception: it is the published developer reference.
+docs/*
+!docs/BLE_PROTOCOL.md
 
 # Build artefacts. Releases are published via GitHub Releases, not committed.
 dist/
