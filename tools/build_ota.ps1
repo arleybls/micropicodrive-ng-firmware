@@ -18,7 +18,7 @@
 # (patch 0-99); displays and filenames use the full M.m.p.
 param(
     [int]$Major = 2,
-    [int]$Minor = 7,
+    [int]$Minor = 8,
     [int]$Patch = 0
 )
 if ($Patch -lt 0 -or $Patch -gt 98) { throw "Patch must be 0-98 (99 is reserved for the auto OTA-test build)" }

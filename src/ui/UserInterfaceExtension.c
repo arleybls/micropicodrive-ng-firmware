@@ -8,7 +8,8 @@
 //     owns the flow and calls uiext_menu_run/uiext_cart_screen instead
 //   - long-press SELECT = CONFIG.CFG star-tag preview (kept from the previous
 //     MicroPicoDrive menu); K4 opens System Tools
-//   - vibro compile-gated OFF until J3/GP11 is electrically verified
+//   - vibro enabled: J3/GP11 wiring confirmed against the KiCad project
+//     (driver-equipped breakout, motor rail 5V — see UserInterfaceExtension.h)
 #include <stddef.h>
 #include <stdio.h>
 #include "pico/stdlib.h"
@@ -492,11 +493,9 @@ void uiext_menu_draw(char **items, int count, int offset) {
 }
 
 // ── Vibration motor ───────────────────────────────────────────────────────────
-static void vibrate(uint32_t ms) {
-#if !UIEXT_VIBRO_ENABLED
-    (void)ms;
-    return;
-#else
+#if UIEXT_VIBRO_ENABLED
+// Returns the soft-start ramp duration in ms, already spent when it returns.
+static uint32_t vibro_start(void) {
     uint slice   = pwm_gpio_to_slice_num(UIEXT_VIBRO_PIN);
     uint channel = pwm_gpio_to_channel(UIEXT_VIBRO_PIN);
     gpio_set_function(UIEXT_VIBRO_PIN, GPIO_FUNC_PWM);
@@ -511,12 +510,24 @@ static void vibrate(uint32_t ms) {
         sleep_ms(1);
     }
     pwm_set_chan_level(slice, channel, UIEXT_VIBRO_DUTY);
-    uint32_t ramp_ms = UIEXT_VIBRO_DUTY / 16;
-    sleep_ms(ms > ramp_ms ? ms - ramp_ms : 0);
-    pwm_set_enabled(slice, false);
+    return UIEXT_VIBRO_DUTY / 16;
+}
+
+static void vibro_stop(void) {
+    pwm_set_enabled(pwm_gpio_to_slice_num(UIEXT_VIBRO_PIN), false);
     gpio_set_function(UIEXT_VIBRO_PIN, GPIO_FUNC_SIO);
     gpio_set_dir(UIEXT_VIBRO_PIN, GPIO_OUT);
     gpio_put(UIEXT_VIBRO_PIN, 0);
+}
+#endif
+
+static void vibrate(uint32_t ms) {
+#if !UIEXT_VIBRO_ENABLED
+    (void)ms;
+#else
+    uint32_t ramp_ms = vibro_start();
+    sleep_ms(ms > ramp_ms ? ms - ramp_ms : 0);
+    vibro_stop();
 #endif
 }
 
@@ -1326,7 +1337,7 @@ static bool run_config_menu(void) {
                     case CFG_REVERT:  snprintf(label, sizeof(label), "Revert Firmware"); break;
                     case CFG_SDCHECK: snprintf(label, sizeof(label), "SD Check");    break;
                     case CFG_SYSINFO: snprintf(label, sizeof(label), "System Info"); break;
-                    case CFG_LEDTEST: snprintf(label, sizeof(label), "LED Test");    break;
+                    case CFG_LEDTEST: snprintf(label, sizeof(label), "LED & Motor Test"); break;
 #if !UIEXT_OTA_ENABLED
                     case CFG_BOOTSEL: snprintf(label, sizeof(label), "BOOTSEL Mode"); break;
 #endif
@@ -1442,19 +1453,26 @@ static bool run_config_menu(void) {
                         break;
 #endif
                     case CFG_LEDTEST: {
-                        // Bench probe for the activity LED (GP10 / UI_LD_ACTIVITY):
-                        // re-inits the pad itself and drives it directly, so it
-                        // answers "is the LED path alive?" independently of the
-                        // hot-plug pin setup and of the UI state machine.
-                        uiext_ota_status("LED Test", "Blinking 5s");
+                        // Bench probe for the activity LED (GP10 / UI_LD_ACTIVITY)
+                        // and the vibration motor (J3/GP11): re-inits the pads and
+                        // drives them directly, so it answers "are the LED and
+                        // motor paths alive?" independently of the hot-plug pin
+                        // setup and of the UI state machine.
+                        uiext_ota_status("LED & Motor Test", "Blink+buzz 5s");
                         gpio_init(PIN_LED_ACTIVITY);
                         gpio_set_dir(PIN_LED_ACTIVITY, GPIO_OUT);
+#if UIEXT_VIBRO_ENABLED
+                        vibro_start();
+#endif
                         uint32_t until = to_ms_since_boot(get_absolute_time()) + 5000;
                         uint32_t now;
                         while ((now = to_ms_since_boot(get_absolute_time())) < until) {
                             gpio_put(PIN_LED_ACTIVITY, (now / 250) & 1);  // 2 Hz
                             sleep_ms(10);
                         }
+#if UIEXT_VIBRO_ENABLED
+                        vibro_stop();
+#endif
                         gpio_put(PIN_LED_ACTIVITY, 0);
                         break;
                     }

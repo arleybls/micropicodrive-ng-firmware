@@ -41,9 +41,11 @@
 #define UIEXT_BTN_CONFIG   9  // K4 — opens System Tools
 
 // ── Vibration motor ───────────────────────────────────────────────────────────
-// J3/GP11 module type NOT yet electrically confirmed — keep disabled until it
-// is (see docs/PORT_PLAN.md open items). 1 = sandbox soft-start PWM driver active.
-#define UIEXT_VIBRO_ENABLED 0
+// J3 (Molex PicoBlade 53261-0371): pin 1 GND, pin 2 +5V, pin 3 → GP11 direct.
+// Module is the sandbox's Keyes-style ERM breakout with onboard transistor
+// driver — GP11 only drives its logic input. Motor rail is 5V, so inrush no
+// longer sags 3V3; the soft-start ramp stays to smooth the 5V draw.
+#define UIEXT_VIBRO_ENABLED 1
 #define UIEXT_VIBRO_PIN  11
 #define UIEXT_VIBRO_MS    80
 #define UIEXT_VIBRO_DUTY 255   // steady level after soft-start ramp; 255 = DC, no
