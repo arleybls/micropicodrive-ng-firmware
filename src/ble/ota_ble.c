@@ -1482,18 +1482,21 @@ static void process_command(void) {
         if (!ok) {
             f_unlink(s_w_tmp);
             send_error(req_id, "ECHECKSUM");
+            uiext_vibrate_event(UIEXT_VEV_ALERT);
             return;
         }
         f_unlink(s_w_path);                           // FatFs rename won't overwrite
         if (f_rename(s_w_tmp, s_w_path) != FR_OK) {
             f_unlink(s_w_tmp);
             send_error(req_id, "EIO");
+            uiext_vibrate_event(UIEXT_VEV_ALERT);
             return;
         }
         s_sd_changed = true;
         build_info_json();                            // free space changed
         printf("[push] %s committed (%lu bytes)\n", s_w_path, (unsigned long)s_w_size);
         send_response(req_id, (const uint8_t *)"{\"ok\":true}", 11, false);
+        uiext_vibrate_event(UIEXT_VEV_XFER);          // after the notify: reply first, buzz second
     } else if (!strcmp(op, "getlabel")) {
         int pi = find_val(js, tok, c, "path");
         if (pi < 0) { send_error(req_id, "EPROTO"); return; }
@@ -2048,6 +2051,7 @@ void ota_run_update_mode(void) {
                 }
                 notify_simple(OTA_ST_COMMITTED);
                 uiext_ota_status("Update Firmware", "Restarting...");
+                uiext_vibrate_event(UIEXT_VEV_XFER);  // inside the pre-reboot window
                 sleep_ms(400);
                 ble_down();
                 // App-driven flow (ADR 0001): the fresh firmware boots into
@@ -2066,6 +2070,7 @@ void ota_run_update_mode(void) {
                     parked = ota_park_update(t_off, sector0_buf, sector0_len);
                 notify_simple(OTA_ST_DECLINED);
                 flash_erase_sector(t_off);   // ensure header stays invalid
+                uiext_vibrate_event(UIEXT_VEV_ALERT);
                 if (parked)
                     uiext_ota_status2("Timed Out", "Saved to", "SD:/.update");
                 else
@@ -2082,6 +2087,7 @@ void ota_run_update_mode(void) {
     if (!done_ok && fail_code) {
         notify_error(fail_code);
         flash_erase_sector(t_off);   // never leave a half-image with a header
+        uiext_vibrate_event(UIEXT_VEV_ALERT);
         // A user-initiated cancel needs no reassurance line (owner) — the
         // error exits keep "old firmware intact".
         if (fail_code == OTA_ERR_CANCEL)

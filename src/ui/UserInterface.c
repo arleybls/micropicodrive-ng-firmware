@@ -335,6 +335,7 @@ static void cart_hotplug_task(void)
         f_mount(NULL, "", 0);
         sdErrStreak = 0;
         cartSdInvalid = false;
+        uiext_vibrate_event(UIEXT_VEV_CART);  //removal cue (safe here, not in the IRQ)
     }
 
     if(cartPresent)
@@ -387,6 +388,7 @@ static void cart_hotplug_task(void)
         LED_ON(PIN_LED_ACTIVITY);
         sleep_ms(100);
         LED_OFF(PIN_LED_ACTIVITY);
+        uiext_vibrate_event(UIEXT_VEV_CART);
     }
 }
 
@@ -718,6 +720,7 @@ bool init_screen()
 //Tools and the path bar — plain status/error text stands alone.
 static void ui_error(const char *text)
 {
+    uiext_vibrate_event(UIEXT_VEV_ALERT);
     uiext_wait_screen(text);
 }
 
@@ -1369,6 +1372,7 @@ void process_user_interface()
                     {
                         //Card pulled while the listing was up: it describes a
                         //card that is no longer there.
+                        uiext_vibrate_event(UIEXT_VEV_ALERT);
                         memset(currentPath, 0, PATH_BUFFER_SIZE);
                         menu_offset = 0;
                         uiState = SHOW_WAITING_SD_CARD;
@@ -1528,6 +1532,7 @@ void process_user_interface()
 
                 bool res = false;
 
+                uiext_vibro_run_begin();
                 switch(cfInserted)
                 {
                     case MDV:
@@ -1537,6 +1542,7 @@ void process_user_interface()
                         res = load_mpd_cartridge();
                         break;
                 }
+                uiext_vibro_run_end();
 
                 LED_OFF(PIN_LED_ACTIVITY);
                 sd_io_result(res);
@@ -1624,6 +1630,7 @@ void process_user_interface()
                         vsn = 0;
                     if(cartCardSerial != 0 && vsn != 0 && vsn != cartCardSerial)
                     {
+                        uiext_vibrate_event(UIEXT_VEV_ALERT);
                         uiext_wait_screen2("Different card", "Save blocked");
                         sleep_ms(2000);
                         show_cart_ready();
@@ -1638,6 +1645,7 @@ void process_user_interface()
 
                     bool res = false;
 
+                    uiext_vibro_run_begin();
                     switch(cfInserted)
                     {
                         case MDV:
@@ -1647,6 +1655,7 @@ void process_user_interface()
                             res = save_mpd_cartridge();
                             break;
                     }
+                    uiext_vibro_run_end();
 
                     LED_OFF(PIN_LED_ACTIVITY);
                     //Removal mid-save lands here as a failed save: the RAM
@@ -1670,6 +1679,7 @@ void process_user_interface()
                         //FA_CREATE_ALWAYS truncates before writing: a failed
                         //save leaves the on-card file incomplete, so the RAM
                         //image (kept, still dirty) must be saved again.
+                        uiext_vibrate_event(UIEXT_VEV_ALERT);
                         uiext_wait_screen2("Save failed", "Retry save!");
                         sleep_ms(2000);
                         show_cart_ready();
@@ -1831,7 +1841,9 @@ static bool try_config_autoload(void) {
     const char *base_name = slash ? slash + 1 : configTaggedPath;
     snprintf(selected_name, MAX_NAME_LEN, "%s", base_name);
 
+    uiext_vibro_run_begin();
     bool res = (fmt == MDV) ? load_mdv_cartridge() : load_mpd_cartridge();
+    uiext_vibro_run_end();
     LED_OFF(PIN_LED_ACTIVITY);
     if (!res) {
         ui_error("Load failed");
@@ -1932,6 +1944,15 @@ typedef struct {
     uint8_t  caption;
     uint8_t  pathbar;
     uint8_t  rainbow;
+    //Haptic-event enables (Motor section). Read as != 0, so a pre-feature
+    //record's erased-flash 0xFF loads as the intended "on" default — no
+    //SETTINGS_MAGIC roll needed.
+    uint8_t  vibro_cart;
+    uint8_t  vibro_xfer;
+    uint8_t  vibro_alert;
+    uint8_t  vibro_lp;
+    uint8_t  vibro_sdop;    //Load/Save tail index 0-3, not a boolean
+    uint8_t  vibro_master;
 } settings_rec_t;
 
 static void settings_flash_write_cb(void *param)
@@ -1954,11 +1975,17 @@ void config_save_settings(void)
     static uint8_t page[FLASH_PAGE_SIZE];  //program granularity
     memset(page, 0xFF, sizeof(page));
     settings_rec_t rec = {
-        .magic      = SETTINGS_MAGIC,
-        .theme_dark = uiext_theme_is_dark() ? 1 : 0,
-        .caption    = (uint8_t)g_caption_pos,
-        .pathbar    = g_path_title_enabled ? 1 : 0,
-        .rainbow    = (uint8_t)uiext_rainbow_get(),
+        .magic       = SETTINGS_MAGIC,
+        .theme_dark  = uiext_theme_is_dark() ? 1 : 0,
+        .caption     = (uint8_t)g_caption_pos,
+        .pathbar     = g_path_title_enabled ? 1 : 0,
+        .rainbow     = (uint8_t)uiext_rainbow_get(),
+        .vibro_cart  = uiext_vibro_ev_get(UIEXT_VEV_CART)      ? 1 : 0,
+        .vibro_xfer  = uiext_vibro_ev_get(UIEXT_VEV_XFER)      ? 1 : 0,
+        .vibro_alert = uiext_vibro_ev_get(UIEXT_VEV_ALERT)     ? 1 : 0,
+        .vibro_lp     = uiext_vibro_ev_get(UIEXT_VEV_LONGPRESS) ? 1 : 0,
+        .vibro_sdop   = (uint8_t)uiext_vibro_sdop_get(),
+        .vibro_master = uiext_vibro_master_get() ? 1 : 0,
     };
     memcpy(page, &rec, sizeof(rec));
 
@@ -1985,6 +2012,12 @@ static void config_load_settings(void)
         g_caption_pos = (caption_pos_t)rec->caption;
     g_path_title_enabled = (rec->pathbar != 0);
     uiext_rainbow_set(rec->rainbow);  //out-of-range = ignored
+    uiext_vibro_ev_set(UIEXT_VEV_CART,      rec->vibro_cart  != 0);
+    uiext_vibro_ev_set(UIEXT_VEV_XFER,      rec->vibro_xfer  != 0);
+    uiext_vibro_ev_set(UIEXT_VEV_ALERT,     rec->vibro_alert != 0);
+    uiext_vibro_ev_set(UIEXT_VEV_LONGPRESS, rec->vibro_lp    != 0);
+    uiext_vibro_sdop_set(rec->vibro_sdop);   //out-of-range (0xFF) = keep default
+    uiext_vibro_master_set(rec->vibro_master != 0);
 #endif
 }
 

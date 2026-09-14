@@ -50,6 +50,9 @@
 #define UIEXT_VIBRO_MS    80
 #define UIEXT_VIBRO_DUTY 255   // steady level after soft-start ramp; 255 = DC, no
                                // continuous switching (safe without flyback diode)
+// Haptic events (uiext_vibrate_event); each toggleable in System Tools → Motor.
+enum { UIEXT_VEV_CART, UIEXT_VEV_XFER, UIEXT_VEV_ALERT, UIEXT_VEV_LONGPRESS,
+       UIEXT_VEV_COUNT };
 
 // ── Long-press continuous scroll ─────────────────────────────────────────────
 #define UIEXT_LONG_PRESS_MS       1000
@@ -199,6 +202,28 @@ void uiext_system_tools(void);
 // Rainbow corner position for settings persistence (0..4 = TL,TR,BL,BR,Off).
 int  uiext_rainbow_get(void);
 void uiext_rainbow_set(int pos);   // out-of-range values are ignored
+
+// Event haptics: one buzz (double for UIEXT_VEV_ALERT) when the event's
+// enable is on; no-op otherwise or when vibro is compiled out. The per-event
+// enables (default on) are persisted like the rainbow position.
+void uiext_vibrate_event(int ev);
+bool uiext_vibro_ev_get(int ev);
+void uiext_vibro_ev_set(int ev, bool on);   // out-of-range events are ignored
+
+// Sustained motor run bracketing an MDV/MPD load or save. The Load/Save
+// setting (0..3 = Off, 250 ms, 500 ms, 1 s spin-down tail) gates it: Off
+// skips the run entirely; otherwise the motor runs for the whole operation
+// and keeps spinning for the selected tail. begin is idempotent; event
+// buzzes are suppressed while a run is active.
+void uiext_vibro_run_begin(void);
+void uiext_vibro_run_end(void);
+int  uiext_vibro_sdop_get(void);    // for settings persistence
+void uiext_vibro_sdop_set(int pos); // out-of-range values are ignored
+
+// Master motor switch: Off silences buttons, events and load/save runs alike.
+// The LED & Motor Test ignores it on purpose (it exists to test the motor).
+bool uiext_vibro_master_get(void);
+void uiext_vibro_master_set(bool on);
 
 // Full-screen cartridge/box-art screen: "<name>.thumb" sidecar when present
 // + centered caption; without box art, "Mounted" over the name, centered

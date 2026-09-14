@@ -17,7 +17,7 @@
 # Usage:  powershell -File tools\build_lite.ps1 [-Major 2] [-Minor 7] [-Patch 0]
 param(
     [int]$Major = 2,
-    [int]$Minor = 8,
+    [int]$Minor = 10,
     [int]$Patch = 0
 )
 # Same 0-99 ceiling as mainline. Lite has no A/B seal so nothing forces it,

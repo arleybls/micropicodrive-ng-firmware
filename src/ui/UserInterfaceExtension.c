@@ -521,13 +521,78 @@ static void vibro_stop(void) {
 }
 #endif
 
+// Set while a sustained load/save run holds the motor on; vibrate() then
+// no-ops so an event buzz cannot stop the run half-way.
+static bool s_vibro_running = false;
+
+// Master switch: Off silences every haptic (buttons, events, load/save runs).
+// The LED & Motor Test bypasses vibrate() on purpose, so it stays testable.
+static bool s_vibro_master = true;
+
+bool uiext_vibro_master_get(void) { return s_vibro_master; }
+void uiext_vibro_master_set(bool on) { s_vibro_master = on; }
+
 static void vibrate(uint32_t ms) {
 #if !UIEXT_VIBRO_ENABLED
     (void)ms;
 #else
+    if (s_vibro_running || !s_vibro_master) return;
     uint32_t ramp_ms = vibro_start();
     sleep_ms(ms > ramp_ms ? ms - ramp_ms : 0);
     vibro_stop();
+#endif
+}
+
+// Per-event haptics: enables persisted by config_save/load_settings (like the
+// rainbow position); default on, so pre-feature saved records (0xFF fields)
+// load as enabled without rolling SETTINGS_MAGIC.
+static bool s_vibro_ev[UIEXT_VEV_COUNT] = { true, true, true, true };
+
+// Load/Save sustained-run setting: index into the tail table; 0 disables the
+// run. Persisted as the raw index — out-of-range (a pre-feature record's
+// 0xFF) is ignored by the setter, keeping the 500 ms default.
+static const uint16_t sdop_tail_ms[] = { 0, 250, 500, 1000 };
+static const char *const sdop_labels[] = { "Off", "250ms", "500ms", "1s" };
+#define SDOP_POS_COUNT 4
+static int s_vibro_sdop_pos = 2;   // 500 ms
+
+int uiext_vibro_sdop_get(void) { return s_vibro_sdop_pos; }
+
+void uiext_vibro_sdop_set(int pos) {
+    if (pos >= 0 && pos < SDOP_POS_COUNT) s_vibro_sdop_pos = pos;
+}
+
+bool uiext_vibro_ev_get(int ev) {
+    return ev >= 0 && ev < UIEXT_VEV_COUNT && s_vibro_ev[ev];
+}
+
+void uiext_vibro_ev_set(int ev, bool on) {
+    if (ev >= 0 && ev < UIEXT_VEV_COUNT) s_vibro_ev[ev] = on;
+}
+
+void uiext_vibrate_event(int ev) {
+    if (!uiext_vibro_ev_get(ev)) return;
+    vibrate(UIEXT_VIBRO_MS);
+    if (ev == UIEXT_VEV_ALERT) {           // double buzz: bad news feels different
+        sleep_ms(60);
+        vibrate(UIEXT_VIBRO_MS);
+    }
+}
+
+void uiext_vibro_run_begin(void) {
+#if UIEXT_VIBRO_ENABLED
+    if (s_vibro_running || !s_vibro_master || s_vibro_sdop_pos == 0) return;
+    vibro_start();
+    s_vibro_running = true;
+#endif
+}
+
+void uiext_vibro_run_end(void) {
+#if UIEXT_VIBRO_ENABLED
+    if (!s_vibro_running) return;
+    sleep_ms(sdop_tail_ms[s_vibro_sdop_pos]);   // spin-down tail (sandbox feel)
+    vibro_stop();
+    s_vibro_running = false;
 #endif
 }
 
@@ -547,8 +612,10 @@ void debounce_button(uint button) {
 // t_press: timestamp captured the moment the button was first detected.
 static bool wait_press_type(uint btn, uint32_t t_press) {
     while (gpio_get(btn) == 0) {  // active-low: 0 = pressed
-        if ((to_ms_since_boot(get_absolute_time()) - t_press) >= (uint32_t)UIEXT_LONG_PRESS_MS)
+        if ((to_ms_since_boot(get_absolute_time()) - t_press) >= (uint32_t)UIEXT_LONG_PRESS_MS) {
+            uiext_vibrate_event(UIEXT_VEV_LONGPRESS);   // release cue at the threshold
             return true;
+        }
         sleep_ms(10);
     }
     sleep_ms(200);
@@ -636,8 +703,13 @@ void uiext_cart_screen(const char *item_name, const char *caption) {
 // error at all.
 enum { CFG_CAPTION, CFG_THEME, CFG_PATHBAR, CFG_RAINBOW, CFG_CONNECT, CFG_OTA, CFG_PAIR, CFG_PAIRED, CFG_REVERT, CFG_SDCHECK, CFG_SYSINFO,
        CFG_LEDTEST, CFG_BOOTSEL, CFG_EXIT,
-       CFG_SEP_UI };   // non-selectable "UI" group separator (dotted rules)
-#define CFG_MAX_ITEMS 15
+       CFG_SEP_UI,     // non-selectable "UI" group separator (dotted rules)
+       CFG_SEP_MOTOR,  // ditto for the haptic-event toggles
+       CFG_VIB_MASTER, CFG_VIB_CART, CFG_VIB_XFER, CFG_VIB_ALERT, CFG_VIB_LP,
+       CFG_VIB_SDOP };
+#define CFG_MAX_ITEMS 22
+
+static bool cfg_is_sep(int id) { return id == CFG_SEP_UI || id == CFG_SEP_MOTOR; }
 #define UIEXT_SEP_RULE_COLOR 0xF7BE   // whitesmoke (RGB 245,245,245), both themes
 
 static const char *const caption_labels[] = { "Top", "Mid", "Bottom" };
@@ -1298,6 +1370,15 @@ static bool run_config_menu(void) {
         ids[count++] = CFG_THEME;
         ids[count++] = CFG_PATHBAR;
         ids[count++] = CFG_RAINBOW;
+#if UIEXT_VIBRO_ENABLED
+        ids[count++] = CFG_SEP_MOTOR;   // haptic-event toggles
+        ids[count++] = CFG_VIB_MASTER;
+        ids[count++] = CFG_VIB_CART;
+        ids[count++] = CFG_VIB_XFER;
+        ids[count++] = CFG_VIB_ALERT;
+        ids[count++] = CFG_VIB_LP;
+        ids[count++] = CFG_VIB_SDOP;
+#endif
         ids[count++] = CFG_EXIT;
         if (sel >= count) sel = count - 1;
         if (sel < view) view = sel;
@@ -1346,9 +1427,36 @@ static bool run_config_menu(void) {
                         // Left-aligned like the items; dotted rules follow
                         strcpy(label, "UI Options");
                         break;
+                    case CFG_SEP_MOTOR:
+                        strcpy(label, "Motor");
+                        break;
+                    case CFG_VIB_MASTER:
+                        snprintf(label, sizeof(label), "Motor: %s",
+                                 uiext_vibro_master_get() ? "On" : "Off");
+                        break;
+                    case CFG_VIB_CART:
+                        snprintf(label, sizeof(label), "Cart: %s",
+                                 uiext_vibro_ev_get(UIEXT_VEV_CART) ? "On" : "Off");
+                        break;
+                    case CFG_VIB_XFER:
+                        snprintf(label, sizeof(label), "Transfer: %s",
+                                 uiext_vibro_ev_get(UIEXT_VEV_XFER) ? "On" : "Off");
+                        break;
+                    case CFG_VIB_ALERT:
+                        snprintf(label, sizeof(label), "Alerts: %s",
+                                 uiext_vibro_ev_get(UIEXT_VEV_ALERT) ? "On" : "Off");
+                        break;
+                    case CFG_VIB_LP:
+                        snprintf(label, sizeof(label), "Long Press: %s",
+                                 uiext_vibro_ev_get(UIEXT_VEV_LONGPRESS) ? "On" : "Off");
+                        break;
+                    case CFG_VIB_SDOP:
+                        snprintf(label, sizeof(label), "Load/Save: %s",
+                                 sdop_labels[s_vibro_sdop_pos]);
+                        break;
                 }
             }
-            bool is_sep = (idx < count && ids[idx] == CFG_SEP_UI);
+            bool is_sep = (idx < count && cfg_is_sep(ids[idx]));
             bool selected = (idx == sel && idx < count);
             draw_cfg_band(row + 1, label,
                           selected ? UIEXT_COLOR_CFG_SEL_TEXT : UIEXT_COLOR_CFG_TEXT,
@@ -1372,13 +1480,13 @@ static bool run_config_menu(void) {
                 vibrate(UIEXT_VIBRO_MS);
                 debounce_button(UIEXT_BTN_UP);
                 if (sel > 0) sel--;
-                if (ids[sel] == CFG_SEP_UI && sel > 0) sel--;   // hop the separator
+                if (cfg_is_sep(ids[sel]) && sel > 0) sel--;   // hop the separator
                 handled = true;
             } else if (gpio_get(UIEXT_BTN_DOWN) == 0) {
                 vibrate(UIEXT_VIBRO_MS);
                 debounce_button(UIEXT_BTN_DOWN);
                 if (sel < count - 1) sel++;
-                if (ids[sel] == CFG_SEP_UI && sel < count - 1) sel++;   // hop the separator
+                if (cfg_is_sep(ids[sel]) && sel < count - 1) sel++;   // hop the separator
                 handled = true;
             } else if (gpio_get(UIEXT_BTN_SELECT) == 0) {
                 uint32_t t_press = to_ms_since_boot(get_absolute_time());
@@ -1407,6 +1515,33 @@ static bool run_config_menu(void) {
                         s_rainbow_pos = (rainbow_pos_t)((s_rainbow_pos + 1) % (RB_OFF + 1));
                         opts_dirty = true;
                         break;
+#if UIEXT_VIBRO_ENABLED
+                    case CFG_VIB_MASTER:
+                        uiext_vibro_master_set(!uiext_vibro_master_get());
+                        opts_dirty = true;
+                        break;
+                    case CFG_VIB_CART:
+                        uiext_vibro_ev_set(UIEXT_VEV_CART, !uiext_vibro_ev_get(UIEXT_VEV_CART));
+                        opts_dirty = true;
+                        break;
+                    case CFG_VIB_XFER:
+                        uiext_vibro_ev_set(UIEXT_VEV_XFER, !uiext_vibro_ev_get(UIEXT_VEV_XFER));
+                        opts_dirty = true;
+                        break;
+                    case CFG_VIB_ALERT:
+                        uiext_vibro_ev_set(UIEXT_VEV_ALERT, !uiext_vibro_ev_get(UIEXT_VEV_ALERT));
+                        opts_dirty = true;
+                        break;
+                    case CFG_VIB_LP:
+                        uiext_vibro_ev_set(UIEXT_VEV_LONGPRESS, !uiext_vibro_ev_get(UIEXT_VEV_LONGPRESS));
+                        opts_dirty = true;
+                        break;
+                    case CFG_VIB_SDOP:
+                        // Repeated SELECT cycles Off -> 250ms -> 500ms -> 1s.
+                        s_vibro_sdop_pos = (s_vibro_sdop_pos + 1) % SDOP_POS_COUNT;
+                        opts_dirty = true;
+                        break;
+#endif
 #if UIEXT_OTA_ENABLED
                     case CFG_CONNECT:
                         ota_run_connect_mode();
@@ -1740,6 +1875,7 @@ int uiext_menu_run(char **items, int count, int *offset) {
                 if (!long_detected &&
                     (to_ms_since_boot(get_absolute_time()) - t0) >= (uint32_t)UIEXT_LONG_PRESS_MS) {
                     long_detected = true;
+                    uiext_vibrate_event(UIEXT_VEV_LONGPRESS);
                     // Preview at threshold: toggle the * on the highlighted
                     // file label (never on bracketed/dir entries).
                     char *item = items[*offset + 1];
