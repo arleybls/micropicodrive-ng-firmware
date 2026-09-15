@@ -220,7 +220,7 @@ void uiext_vibro_run_end(void);
 int  uiext_vibro_sdop_get(void);    // for settings persistence
 void uiext_vibro_sdop_set(int pos); // out-of-range values are ignored
 
-// Master motor switch: Off silences buttons, events and load/save runs alike.
+// Master motor switch: Off silences events and load/save runs alike.
 // The LED & Motor Test ignores it on purpose (it exists to test the motor).
 bool uiext_vibro_master_get(void);
 void uiext_vibro_master_set(bool on);

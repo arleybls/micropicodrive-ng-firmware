@@ -525,7 +525,7 @@ static void vibro_stop(void) {
 // no-ops so an event buzz cannot stop the run half-way.
 static bool s_vibro_running = false;
 
-// Master switch: Off silences every haptic (buttons, events, load/save runs).
+// Master switch: Off silences every haptic (events and load/save runs).
 // The LED & Motor Test bypasses vibrate() on purpose, so it stays testable.
 static bool s_vibro_master = true;
 
@@ -1049,19 +1049,15 @@ int uiext_menu_pick(const char *title, const char **items, int n) {
             }
         }
         if (gpio_get(UIEXT_BTN_UP) == 0) {
-            vibrate(UIEXT_VIBRO_MS);
             debounce_button(UIEXT_BTN_UP);
             if (sel > 0) { sel--; redraw = true; }
         } else if (gpio_get(UIEXT_BTN_DOWN) == 0) {
-            vibrate(UIEXT_VIBRO_MS);
             debounce_button(UIEXT_BTN_DOWN);
             if (sel < n - 1) { sel++; redraw = true; }
         } else if (gpio_get(UIEXT_BTN_SELECT) == 0) {
-            vibrate(UIEXT_VIBRO_MS);
             debounce_button(UIEXT_BTN_SELECT);
             return sel;
         } else if (gpio_get(UIEXT_BTN_CONFIG) == 0) {
-            vibrate(UIEXT_VIBRO_MS);
             debounce_button(UIEXT_BTN_CONFIG);
             return -1;
         }
@@ -1477,20 +1473,17 @@ static bool run_config_menu(void) {
         bool handled = false;
         while (!handled) {
             if (gpio_get(UIEXT_BTN_UP) == 0) {
-                vibrate(UIEXT_VIBRO_MS);
                 debounce_button(UIEXT_BTN_UP);
                 if (sel > 0) sel--;
                 if (cfg_is_sep(ids[sel]) && sel > 0) sel--;   // hop the separator
                 handled = true;
             } else if (gpio_get(UIEXT_BTN_DOWN) == 0) {
-                vibrate(UIEXT_VIBRO_MS);
                 debounce_button(UIEXT_BTN_DOWN);
                 if (sel < count - 1) sel++;
                 if (cfg_is_sep(ids[sel]) && sel < count - 1) sel++;   // hop the separator
                 handled = true;
             } else if (gpio_get(UIEXT_BTN_SELECT) == 0) {
                 uint32_t t_press = to_ms_since_boot(get_absolute_time());
-                vibrate(UIEXT_VIBRO_MS);
                 bool long_press = wait_press_type(UIEXT_BTN_SELECT, t_press);
                 if (long_press) {   // drain held button
                     while (gpio_get(UIEXT_BTN_SELECT) == 0) sleep_ms(20);
@@ -1617,7 +1610,6 @@ static bool run_config_menu(void) {
                 }
                 handled = true;
             } else if (gpio_get(UIEXT_BTN_CONFIG) == 0) {
-                vibrate(UIEXT_VIBRO_MS);
                 debounce_button(UIEXT_BTN_CONFIG);
                 running = false;
                 handled = true;
@@ -1805,7 +1797,6 @@ int uiext_menu_run(char **items, int count, int *offset) {
         }
         if (gpio_get(UIEXT_BTN_UP) == 0) {
             uint32_t t_press = to_ms_since_boot(get_absolute_time());
-            vibrate(UIEXT_VIBRO_MS);
             bool lp = wait_press_type(UIEXT_BTN_UP, t_press);
 #if UIEXT_SCROLL_ANIM_ENABLED
             last_input_ms = to_ms_since_boot(get_absolute_time());
@@ -1837,7 +1828,6 @@ int uiext_menu_run(char **items, int count, int *offset) {
 
         if (gpio_get(UIEXT_BTN_DOWN) == 0) {
             uint32_t t_press = to_ms_since_boot(get_absolute_time());
-            vibrate(UIEXT_VIBRO_MS);
             bool lp = wait_press_type(UIEXT_BTN_DOWN, t_press);
 #if UIEXT_SCROLL_ANIM_ENABLED
             last_input_ms = to_ms_since_boot(get_absolute_time());
@@ -1869,7 +1859,6 @@ int uiext_menu_run(char **items, int count, int *offset) {
 
         if (gpio_get(UIEXT_BTN_SELECT) == 0) {
             uint32_t t0 = to_ms_since_boot(get_absolute_time());
-            vibrate(UIEXT_VIBRO_MS);
             bool long_detected = false;
             while (gpio_get(UIEXT_BTN_SELECT) == 0) {
                 if (!long_detected &&
@@ -1905,7 +1894,6 @@ int uiext_menu_run(char **items, int count, int *offset) {
 
         if (gpio_get(UIEXT_BTN_CONFIG) == 0) {
             uint32_t t_press = to_ms_since_boot(get_absolute_time());
-            vibrate(UIEXT_VIBRO_MS);
             bool long_press = wait_press_type(UIEXT_BTN_CONFIG, t_press);
 #if UIEXT_SCROLL_ANIM_ENABLED
             last_input_ms = to_ms_since_boot(get_absolute_time());
