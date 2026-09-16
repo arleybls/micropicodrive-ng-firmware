@@ -6,6 +6,12 @@ the QL loads and saves as if a real cartridge were spinning. Cartridge images
 live on an SD card and are chosen from a colour display on the front of the
 unit.
 
+See the [owner's manual](docs/USER_MANUAL.md) ([complete PDF](docs/USER_MANUAL.pdf),
+[firmware-only PDF](docs/FIRMWARE_MANUAL.pdf),
+[hardware-installation PDF](docs/HARDWARE_INSTALLATION_MANUAL.pdf)) for the installation outline,
+SD card preparation, everyday use and the complete System Tools reference.
+The physical fitting details still need confirmation for the NG board revision.
+
 Core 0 emulates the microdrive protocol using the RP2040/RP2350 PIO state
 machines, DMA and an event queue. Core 1 runs everything the user touches: the
 ST7735 80x160 display, the four buttons, the SD card and the firmware updater.
