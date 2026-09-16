@@ -2,9 +2,17 @@ build
 tools/__pycache__/
 
 # Local-only reference docs (owner's working notes) — deliberately untracked.
-# BLE_PROTOCOL.md is the exception: it is the published developer reference.
+# Publish the developer reference and owner's manual.
 docs/*
 !docs/BLE_PROTOCOL.md
+!docs/USER_MANUAL.md
+!docs/USER_MANUAL.pdf
+!docs/FIRMWARE_MANUAL.pdf
+!docs/HARDWARE_INSTALLATION_MANUAL.pdf
+!docs/images/
+!docs/images/assembly/
+!docs/images/assembly/*.png
+!docs/images/assembly/*.jpg
 
 # Build artefacts. Releases are published via GitHub Releases, not committed.
 dist/
@@ -20,7 +28,10 @@ tools/ota_bletest.py
 tools/publish_release.ps1
 
 # Boot-animation source assets and converters: local only
-images/
+/images/
+
+# Duck-vote boards (session working material, mirrored to a Claude artifact)
+ducks/
 
 # Local History extension snapshots (can contain copies of excluded files)
 .history/
