@@ -2,17 +2,14 @@ build
 tools/__pycache__/
 
 # Local-only reference docs (owner's working notes) — deliberately untracked.
-# Publish the developer reference and owner's manual.
+# Publish the developer reference and the firmware manual; the hardware
+# installation manual lives in the micropicodrive-ng-hardware repository.
 docs/*
 !docs/BLE_PROTOCOL.md
-!docs/USER_MANUAL.md
-!docs/USER_MANUAL.pdf
+!docs/FIRMWARE_MANUAL.md
 !docs/FIRMWARE_MANUAL.pdf
-!docs/HARDWARE_INSTALLATION_MANUAL.pdf
 !docs/images/
-!docs/images/assembly/
-!docs/images/assembly/*.png
-!docs/images/assembly/*.jpg
+!docs/images/rainbow.png
 
 # Build artefacts. Releases are published via GitHub Releases, not committed.
 dist/

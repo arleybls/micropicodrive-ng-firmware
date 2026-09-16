@@ -1,7 +1,9 @@
-"""Render complete and split owner manuals. Requires: pip install pymupdf.
+"""Render the firmware manual PDF. Requires: pip install pymupdf.
 
-The renderer supports the Markdown constructs used by this manual: headings,
-paragraphs, links, emphasis, code fences, lists and tables.
+The renderer supports the Markdown constructs used by the manual: headings,
+paragraphs, links, emphasis, code fences, lists and tables. The hardware
+installation manual lives in the micropicodrive-ng-hardware repository,
+which carries its own copy of this renderer.
 """
 
 from pathlib import Path
@@ -14,7 +16,8 @@ import pymupdf
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "docs" / "USER_MANUAL.md"
+SOURCE = ROOT / "docs" / "FIRMWARE_MANUAL.md"
+DESTINATION = SOURCE.with_suffix(".pdf")
 REPOSITORY = "https://github.com/arleybls/micropicodrive-ng-firmware/blob/main/"
 
 
@@ -145,60 +148,24 @@ table { border-collapse: collapse; width: 100%; font-size: 8.5pt; margin: 8pt 0 
 th { font-weight: bold; color: #153c57; }
 td, th { border: 0.5pt solid #b9c9d3; padding: 5pt; vertical-align: top; }
 li { margin-bottom: 5pt; }
-figure { margin: 10pt auto 12pt; text-align: center; page-break-inside: avoid; }
-figure img { max-width: 78%; max-height: 260pt; }
+figure { margin: 2pt 0 14pt; text-align: left; page-break-inside: avoid; }
+figure img { max-width: 100%; max-height: 260pt; }
 figcaption { font-size: 8pt; color: #52616b; margin-top: 4pt; }
 """
 
 
-def sections(source):
-    matches = list(re.finditer(r"^## (.+)$", source, re.M))
-    result = {"_front": source[:matches[0].start()]}
-    for index, match in enumerate(matches):
-        end = matches[index + 1].start() if index + 1 < len(matches) else len(source)
-        result[match.group(1)] = source[match.start():end]
-    return result
-
-
-def edition_source(source, edition):
-    if edition == "complete":
-        return source
-    parts = sections(source)
-    if edition == "hardware":
-        body = parts["The two parts and firmware versions"] + parts["Installing the mainboard in the QL"]
-        body = re.sub(r"\]\(#([^)]+)\)", r"](USER_MANUAL.md#\1)", body)
-        return "# MicroPicoDrive NG hardware installation manual\n\n" + \
-            "This edition contains the physical installation and optional motor guidance from the owner's manual. " \
-            "The photographs show the current NG boards and motor module.\n\n" + body
-    excluded = {"Contents", "Installing the mainboard in the QL"}
-    body = "".join(value for name, value in parts.items() if name != "_front" and name not in excluded)
-    return "# MicroPicoDrive NG firmware manual\n\n" + \
-        "This edition covers SD card preparation, everyday use, System Tools, Bluetooth, firmware updates and troubleshooting.\n\n" + body
-
-
-def build(source, edition, destination, footer_title):
-    story = pymupdf.Story(render_markdown(edition_source(source, edition)), user_css=CSS)
+def main():
+    story = pymupdf.Story(render_markdown(SOURCE.read_text(encoding="utf-8")), user_css=CSS)
     paper = pymupdf.paper_rect("a4")
     area = pymupdf.Rect(44, 44, paper.width - 44, paper.height - 46)
     document = story.write_with_links(lambda *_: (paper, area, None))
     for number, page in enumerate(document, 1):
         page.draw_line((44, paper.height - 34), (paper.width - 44, paper.height - 34), color=(0.7, 0.76, 0.8), width=0.5)
-        page.insert_text((44, paper.height - 22), f"MicroPicoDrive NG | {footer_title} | v2.10.1", fontsize=8, color=(0.35, 0.4, 0.45))
+        page.insert_text((44, paper.height - 22), "MicroPicoDrive NG | Firmware manual | v2.10.1", fontsize=8, color=(0.35, 0.4, 0.45))
         page.insert_text((paper.width - 75, paper.height - 22), f"{number} / {len(document)}", fontsize=8)
-    document.set_metadata({"title": "MicroPicoDrive NG owner's manual", "subject": "Installation, SD cards and System Tools", "author": "MicroPicoDrive NG project"})
-    document.save(destination, garbage=4, deflate=True)
-    print(f"Created {destination} ({len(document)} pages)")
-
-
-def main():
-    source = SOURCE.read_text(encoding="utf-8")
-    editions = [
-        ("complete", SOURCE.with_suffix(".pdf"), "Owner's manual"),
-        ("firmware", SOURCE.parent / "FIRMWARE_MANUAL.pdf", "Firmware manual"),
-        ("hardware", SOURCE.parent / "HARDWARE_INSTALLATION_MANUAL.pdf", "Hardware installation"),
-    ]
-    for edition, destination, title in editions:
-        build(source, edition, destination, title)
+    document.set_metadata({"title": "MicroPicoDrive NG firmware manual", "subject": "SD cards, everyday use and System Tools", "author": "MicroPicoDrive NG project"})
+    document.save(DESTINATION, garbage=4, deflate=True)
+    print(f"Created {DESTINATION} ({len(document)} pages)")
 
 
 if __name__ == "__main__":
