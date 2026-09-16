@@ -1,26 +1,25 @@
-# MicroPicoDrive NG owner's manual
+# MicroPicoDrive NG firmware manual
 
-This manual shows you how to fit the board inside your Sinclair QL, prepare a
-microSD card, work with cartridge images, and set everything up in System
-Tools. It matches firmware version 2.10.1.
+![](images/rainbow.png)
 
-**A note on the installation chapter:** the operating instructions have been
-checked against the firmware, and the photographs show the current NG boards,
-the Pico orientation and the optional motor module. What we could not yet
-confirm is the QL ribbon orientation, the mounting hardware and the exact
-fitting steps for each drive bay — so treat that chapter as an outline, and
-follow the instructions supplied with your board revision for those details.
+This manual shows you how to prepare a microSD card, work with cartridge
+images on the Sinclair QL, and set everything up in System Tools. It matches
+firmware version 2.10.1.
+
+Fitting the board inside the QL — including the Pico and the optional
+vibration motor — is covered by the hardware installation manual in the
+[hardware repository](https://github.com/arleybls/micropicodrive-ng-hardware).
 
 ## Contents
 
 - [The two parts and firmware versions](#the-two-parts-and-firmware-versions)
-- [Installing the mainboard in the QL](#installing-the-mainboard-in-the-ql)
 - [Preparing the microSD card](#preparing-the-microsd-card)
 - [First start and everyday use](#first-start-and-everyday-use)
 - [System Tools reference](#system-tools-reference)
-- [Bluetooth file management](#bluetooth-file-management)
 - [Firmware updates](#firmware-updates)
 - [Troubleshooting](#troubleshooting)
+- [Addendum: creating images with Sinclair MDV Builder](#addendum-creating-images-with-sinclair-mdv-builder)
+- [Addendum: the Bluetooth protocol for developers](#addendum-the-bluetooth-protocol-for-developers)
 
 ## The two parts and firmware versions
 
@@ -47,146 +46,6 @@ physically plugging in or pulling out the cartridge board.
 Install the firmware that matches the Pico you actually fitted. The Pico 2 W's
 wireless features use Bluetooth Low Energy (BLE), not Wi-Fi.
 
-## Installing the mainboard in the QL
-
-### Before opening the case
-
-**What you'll need before you open the case:**
-
-- The assembled mainboard and cartridge board
-- The correct QL ribbon cable and mounting hardware for your kit
-- A prepared microSD card
-
-If your Pico came blank, plan to install the firmware before you close the QL
-up again — see the **Firmware updates** section of the firmware manual.
-
-1. Shut down the QL, disconnect its power supply and disconnect attached
-   equipment. Remove any tape cartridges.
-2. Work on a clean surface and handle the boards by their edges. Keep loose
-   screws and other metal away from the electronics.
-3. Open the QL using the service instructions for its case revision. Lift the
-   cover carefully: the keyboard membrane tails connect it to the motherboard.
-   Avoid pulling, sharply bending or trapping these tails.
-4. Record the existing Microdrive cable routing and connector orientation
-   before disconnecting anything.
-
-### Fitting outline
-
-The mainboard replaces an internal Microdrive mechanism. Its QL bus connector
-is **J2**, a 14-pin (2 by 7) header. **J1** is the cartridge edge connector.
-The optional motor connection is **J3**, the small three-pin socket marked
-`GND`, `VCC` and `IN`. Confirm these markings against your actual board revision.
-
-![Rear of the NG mainboard and cartridge board, showing the Pico, J3 motor socket, edge connector and microSD socket.](images/assembly/boards-rear.jpg)
-
-### Fitting the Pico
-
-If the mainboard was supplied without a Pico, fit the correct board before
-installing the assembly in the QL. Use a Raspberry Pi Pico for Lite firmware or
-a Pico 2 W for Full firmware.
-
-1. Disconnect QL and USB power. Hold the Pico by its edges and avoid touching
-   the contacts.
-2. Orient it as shown below: the Pico's USB connector sits at the same end as
-   the mainboard's J3 motor socket. Check the orientation before engaging any
-   pins.
-3. Align both rows with the sockets. Start every pin squarely, then press the
-   board down evenly with light pressure at both ends. Stop if a pin bends or
-   the rows do not enter together.
-4. Look along both sides to confirm that no pin is outside a socket and that
-   the Pico is fully and evenly seated.
-
-![Aligning a Pico 2 W with the two mainboard sockets; its USB connector is beside the J3 motor socket end.](images/assembly/pico-installation.jpg)
-
-The Pico sits underneath the mainboard. That low profile is what leaves room
-for the QL keyboard above it, so don't add tall headers or spacers unless your
-enclosure's fitting instructions say you can.
-
-![Side view of the Pico mounted beneath the mainboard, showing the intended low-profile clearance.](images/assembly/pico-clearance.jpg)
-
-### Installing and connecting the optional motor
-
-Use a **driver-equipped vibration module** made for a logic-level trigger and
-a 5 V supply, such as the module shown below. J3 is not a bare-motor output:
-connecting a motor directly to it can overload GP11 and damage the Pico.
-
-J3 is a three-pin Molex PicoBlade socket. Its electrical connections are:
-
-| J3 connection | Function |
-|---|---|
-| GND | Ground |
-| VCC | +5 V supply for the motor module |
-| IN | Logic input from Pico GP11 |
-
-![Driver-equipped coin vibration motor module and its three-wire GND, VCC and trigger connection.](images/assembly/motor-module.jpg)
-
-1. Disconnect QL and power it off before connecting or moving the motor.
-2. Inspect the labels at both ends. Connect J3 `GND` to the module's ground,
-   J3 `VCC` to its supply input, and J3 `IN` to its trigger input. Use the
-   supplied keyed lead where available. **Do not rely on wire colour alone**;
-   cable colours and module pin order can differ.
-3. Check that the plug is fully seated and that no contact is shifted sideways.
-   Keep the lead away from the cartridge opening, keyboard membrane tails,
-   sharp edges and screw posts.
-4. Before fixing the module permanently, close or support the keyboard safely,
-   power the QL and run **System Tools > LED & Motor Test**. The motor should
-   run for five seconds. Switch off and disconnect power again before adjusting it.
-5. Removing the original Microdrive exposes a support hole in the lower case.
-   Place the motor module over that support as shown below and align one of its
-   mounting holes with the case support hole. Pass the **supplied screw** through
-   the aligned holes, fit the **supplied nut** on the opposite side, and tighten
-   until the module is secure. Do not overtighten: the module PCB and plastic
-   support can be damaged. Check that the module lies flat and that its solder
-   joints cannot touch the QL motherboard or nearby metalwork.
-6. Re-run LED & Motor Test after final assembly. Configure normal feedback under
-   **System Tools > Motor** as described in the firmware section. Leave enough
-   cable slack for servicing, but keep the lead out of the keyboard, cartridge
-   and case-screw paths.
-
-![Motor module secured to the lower-case support hole exposed after removing the original Microdrive, using the supplied screw and nut.](images/assembly/motor-assembly.jpg)
-
-### Fitting the mainboard
-
-1. Identify the drive position to be replaced using the kit's fitting
-   instructions. The firmware has no menu setting for choosing `mdv1_` or
-   `mdv2_`; numbering depends on the QL's drive-select chain and wiring.
-2. Remove the selected mechanism as directed for the kit. Retain its hardware
-   separately so it can be restored later.
-3. Fit the mainboard with the specified supports and fasteners, with its
-   cartridge connector aligned to the case opening. Check that the underside
-   cannot touch conductive parts and that inserting a cartridge will not bend
-   an unsupported board. Do not assume the original screws are the right length.
-4. Connect the QL ribbon to J2 only after confirming pin 1 and the cable
-   orientation at **both ends** against the board-specific fitting
-   instructions. Check that neither connector is offset by a row or a pin.
-   The stripe on the cable is not, by itself, proof of the right orientation.
-5. If required, fit the Pico and optional motor as described above. Make these
-   connections with power disconnected.
-6. Route cables clear of case posts, sharp edges and the cartridge opening.
-   Check connector seating, board clearance and the keyboard connections before
-   refitting the cover.
-7. Insert the prepared cartridge board without force, reconnect the QL and
-   perform the first-start check described in the **First start and everyday
-   use** section of the firmware manual.
-
-Only the removable cartridge board is designed for powered insertion and
-removal. Disconnect QL power before changing the mainboard, Pico, ribbon or
-motor wiring. USB servicing also needs a board-specific power arrangement;
-do not assume simultaneous USB and QL power is supported.
-
-Hardware drawings and board photographs live in the
-[hardware project](https://github.com/arleybls/micropicodrive-ng-hardware).
-
-### If something goes wrong after reassembly
-
-- **No display:** check cartridge-board seating and QL power. Disconnect power
-  before inspecting internal ribbon or Pico connections.
-- **QL cannot read the image:** wait for mounting, use the correct `mdv`
-  number and try a known-good image; inspect wiring only with power
-  disconnected.
-
-See the firmware manual's Troubleshooting section for everything else.
-
 ## Preparing the microSD card
 
 ### Format and copy files
@@ -196,7 +55,7 @@ See the firmware manual's Troubleshooting section for everything else.
    **FAT32 or exFAT**. Both are enabled in this firmware; FAT12 and FAT16 are
    also supported by its filesystem library. NTFS and APFS are not supported.
    Check the selected device carefully before applying the format.
-3. Copy valid `.mdv` or `.mpd` cartridge images onto the card. You can put them
+3. Copy valid `.mdv` cartridge images onto the card. You can put them
    in the root or organise them into folders. Extract downloaded ZIP archives
    on the computer first.
 4. Safely eject the card from the computer and insert it into the cartridge
@@ -216,7 +75,6 @@ Example card layout:
     CHESS.mdv.thumb       optional matching artwork
   Work/
     NOTES.mdv
-  UTILITIES.mpd
   CONFIG.CFG             created when you tag an auto-load image
   .update/               needed only for firmware updates
 ```
@@ -224,16 +82,19 @@ Example card layout:
 The QL never sees this folder tree — it only sees the inside of the mounted
 cartridge image. Copying a loose QL program or a ZIP file onto the card does
 not put it inside a cartridge; use an image authoring tool on your computer
-for that. The device itself cannot create new blank images.
+for that. The device itself cannot create new blank images. This project's
+companion app for authoring `.mdv` images is
+[Sinclair MDV Builder](https://github.com/arleybls/sinclair-mdv-builder) —
+see the [addendum](#addendum-creating-images-with-sinclair-mdv-builder) at
+the end of this manual for a quick reference.
 
 ### Image and filename limits
 
 | Item | Requirement or behaviour |
 |---|---|
 | MDV image | 174,930 bytes |
-| MPD image | 160,140 bytes |
-| Browser file filter | `.mdv` and `.mpd`, case-insensitive |
-| Auto-load extension | Use all-lowercase or all-uppercase: `.mdv`, `.MDV`, `.mpd`, `.MPD`; mixed-case extensions do not auto-load in this version |
+| Browser file filter | `.mdv`, case-insensitive |
+| Auto-load extension | Use all-lowercase or all-uppercase: `.mdv` or `.MDV`; mixed-case extensions do not auto-load in this version |
 | File and folder names | Keep each to 63 bytes or fewer, including extension; longer names are truncated by the browser and may fail to open |
 | Full path | Keep below 300 bytes, including separators; shorter paths also avoid thumbnail lookup limits |
 | Entries per folder | At most 64 eligible files and folders; use subfolders for larger collections |
@@ -321,11 +182,6 @@ back to the card.
 If you eject after QL writes without saving to SD, the device asks
 **Eject? / Unsaved changes**. **Yes discards those changes**; it does not save
 them. Choose No, press K3 to save, then eject again to keep your work.
-
-The same two-step rule applies to deleting files or formatting a cartridge
-from the QL. QL `FORMAT` acts on the mounted image and destroys its contents;
-it does not format the SD card or create a new image file. Work on a copy if
-you need to preserve the original cartridge.
 
 Keep backups on your computer. Saving rewrites the image in place, so a failed
 or interrupted SD save can leave the on-card file incomplete. If you see
@@ -444,39 +300,6 @@ Revert Firmware invalidates the current slot and boots the other one. It is
 not a permanent toggle between two retained versions; reinstall the newer
 firmware if you want to return to it later.
 
-## Bluetooth file management
-
-The repository includes [tools/mdvtool.py](../tools/mdvtool.py), a computer
-client for Pico 2 W. It requires Python 3.10 or later and a working BLE adapter.
-Run these commands from the repository root:
-
-```console
-python -m pip install bleak
-```
-
-For first-time pairing, choose **System Tools > Pair Device**, then run:
-
-```console
-python tools/mdvtool.py pair
-```
-
-Follow the pairing prompts. For subsequent file operations, choose **Connect**
-on the device, then use commands such as:
-
-```console
-python tools/mdvtool.py scan
-python tools/mdvtool.py info
-python tools/mdvtool.py ls /
-python tools/mdvtool.py put CHESS.mdv /CHESS.mdv
-python tools/mdvtool.py get /CHESS.mdv CHESS-backup.mdv
-```
-
-Use `python tools/mdvtool.py --help` for other commands, including rename,
-delete and cartridge-label operations. Keep the device in Connect while
-transferring; return to the browser when finished. The browser refreshes after
-a session changes SD contents. This script is a file manager, not a firmware
-upload client. Developers can consult the [BLE protocol](BLE_PROTOCOL.md).
-
 ## Firmware updates
 
 Use a release intended for your board. Save and eject your mounted image first,
@@ -506,10 +329,31 @@ image with the same version number can still be offered.
 
 ### Over Bluetooth
 
-On Pico 2 W, pair the upload client, eject the image and select **Update
-Firmware**. Use a client implementing this project's BLE update protocol to
-send the BIN and matching manifest. The repository does not include a dedicated
-firmware upload client.
+The usual way to update a Pico 2 W wirelessly is the **MicroPicoDrive
+Companion** phone app: it finds the latest release, downloads and checks it,
+and sends it to the unit. Pair the phone once, eject the mounted image, and
+start the update from the app — on firmware 2.7.0 or later the app switches
+the unit into Update Firmware mode by itself; on older firmware, choose
+**System Tools > Update Firmware** on the unit first. Any client implementing
+this project's BLE update protocol can do the same; this repository does not
+include a dedicated firmware upload client.
+
+**Quick reference: the MicroPicoDrive Companion app**
+
+| When you want to... | Start in the app at |
+|---|---|
+| Connect your phone to the unit | Home > Connect to a unit |
+| Update the unit's firmware | Home > Firmware |
+| Send a cartridge to the unit | Local MDV Catalog > long-press a cartridge |
+| Retrieve a cartridge from the unit | Remote MDVs > the retrieve button |
+| Back up the whole unit into a folder | Remote MDVs > Back up |
+| Create a blank cartridge on the SD card | Remote MDVs > Create empty |
+| Reboot, identify or rename the unit | Home > Pico Tools |
+
+Two things the app deliberately does not do: copying is not synchronizing —
+changes made on the QL do not update the phone's copy, so retrieve the
+cartridge again when you want the newer contents — and sending a cartridge
+does not mount it; load it with the unit's own buttons afterwards.
 
 The wireless route requires a strictly newer version. Confirm installation
 when prompted. No discards the upload; if the prompt times out, the firmware
@@ -538,7 +382,7 @@ hardware's USB power arrangement before servicing an installed mainboard.
 |---|---|
 | No display | Check cartridge-board seating and QL power. Disconnect power before inspecting internal ribbon or Pico connections |
 | Waiting for SD / card will not mount | Check seating and a supported filesystem; try a backed-up, freshly prepared card |
-| No images listed | Extract archives, check `.mdv`/`.mpd` extensions and hidden attributes, and open the correct folder |
+| No images listed | Extract archives, check the `.mdv` extension and hidden attributes, and open the correct folder |
 | A file is missing / `...` at the end | Split a large folder into smaller ones; keep names within the browser limits |
 | Bad format | Check image format and exact file size; recover a clean copy if necessary |
 | Load failed | Check the original filename/path and card readability; a truncated long name can cause this |
@@ -559,6 +403,54 @@ up a false drive-select signal and leave the activity LED stuck on — which
 also blocks file operations and settings saves. Power-cycle the board and try
 again. Inside a QL this doesn't happen; it is purely a bench condition.
 
+## Addendum: creating images with Sinclair MDV Builder
+
+[Sinclair MDV Builder](https://github.com/arleybls/sinclair-mdv-builder) is
+this project's free Windows companion app for creating, inspecting, editing
+and extracting files from `.mdv` cartridge images. It needs the .NET 8
+Desktop Runtime. The basics at a glance:
+
+| What you want | Where it is |
+|---|---|
+| A new, empty cartridge | New empty cartridge — creates a valid 174,930-byte image |
+| A cartridge from files you have | New cartridge from loose files, or drag and drop them in |
+| A cartridge from a downloaded ZIP | New cartridge from a ZIP archive |
+| Add files to an existing image | Open the `.mdv`, then Import file(s) or Import from ZIP |
+| Get files out of an image | Extract a file, Extract All, or Export to ZIP |
+| Look inside an image | Directory listing, per-file hex/text viewer, sector map, media info |
+| Housekeeping | Duplicate, Rename, Delete, and Set Exec on any file |
+
+Points that matter for this device:
+
+- QL file type and data-space survive ZIP export/import (qlzip-compatible),
+  so executables keep their headers.
+- Save the finished `.mdv`, then copy it to the SD card as described in
+  [Preparing the microSD card](#preparing-the-microsd-card).
+- Its images round-trip the builder's own loader and tests; validation on a
+  stock QL ROM is still in progress, so keep a backup of anything important.
+
+## Addendum: the Bluetooth protocol for developers
+
+On the Pico 2 W, the Connect mode in System Tools speaks a documented
+Bluetooth Low Energy protocol, so you can write your own tool — an app or a
+script — to manage the SD card wirelessly. The full wire protocol lives in
+[BLE_PROTOCOL.md](BLE_PROTOCOL.md) in this repository. What it lets a client
+do, at a glance:
+
+| Area | Operations |
+|---|---|
+| Files | list folders, upload and download images (SHA-256 verified), rename, delete |
+| Cartridge labels | read and rewrite the medium name inside an `.mdv` image |
+| Device | info and health snapshots, identify (flash the screen), set the device name |
+| Firmware | hand the device over to its wireless update mode |
+
+The essentials: pair once per computer while the device shows **Pair
+Device** (a 6-digit passkey appears on the device display), then talk to it
+whenever it sits on the **Connect** screen. Uploads are refused while a
+cartridge image is mounted, and every transfer is checksummed — a committed
+upload is a verified upload. The repository also ships `tools/mdvtool.py`,
+a working command line client that doubles as example code.
+
 ## Documentation basis
 
 Operation and menu details were checked against
@@ -567,7 +459,4 @@ Operation and menu details were checked against
 [SD Check](../src/storage/sd_check.c),
 [System Info](../src/ui/sys_info.c),
 [filesystem configuration](../src/lib-sdcard/src/include/ffconf.h), and
-[BLE implementation](../src/ble/ota_ble.c). The hardware overview was checked
-against the locally available hardware repository's README and supporting notes.
-No physical QL fitting, card compatibility or end-to-end hardware tests were
-performed as part of writing this manual.
+[BLE implementation](../src/ble/ota_ble.c).
