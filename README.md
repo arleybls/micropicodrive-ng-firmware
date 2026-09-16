@@ -33,11 +33,20 @@ updating the device in the field. What it adds:
 - A second hardware target. The Pico 2 W build adds Bluetooth Low Energy for
   wireless firmware updates and A/B firmware slots, so a failed update leaves
   the previous firmware bootable.
+- Wireless cartridge management on the Pico 2 W: a paired phone or PC can
+  browse the SD card, upload and download images, rename files and edit
+  cartridge labels over BLE. The wire protocol is documented in
+  [docs/BLE_PROTOCOL.md](docs/BLE_PROTOCOL.md), and `tools/mdvtool.py` is a
+  working command line client.
+- Haptic feedback from a vibration motor: distinct cues for cartridge
+  insert and eject, finished transfers, errors (a double buzz) and the
+  long-press threshold, and the motor runs while a cartridge image loads or
+  saves. Every cue can be switched off individually in System Tools.
 - Guards against data loss: eject is refused while the QL is using the drive, a
   cartridge with unsaved changes asks before ejecting, and saving is blocked if
   the SD card was swapped after the image was loaded.
-- Persistent display settings (theme, caption position, path bar, corner
-  marker) stored in flash.
+- Persistent settings (theme, caption position, path bar, corner marker, and
+  the Motor haptic options) stored in flash.
 
 The upstream README does not document its firmware update mechanism or its UI
 workflow, so this list describes what this firmware does rather than claiming
@@ -55,7 +64,7 @@ cmake -DPICO_BOARD=pico2_w   ->  MicroPicoDrive        (Raspberry Pi Pico 2 W, R
 
 | | Lite (RP2040) | Pico 2 W (RP2350) |
 |---|---|---|
-| Bluetooth | none | BLE: pairing, wireless firmware upload |
+| Bluetooth | none | BLE: pairing, firmware upload, SD file management |
 | Firmware slots | single image plus a staging area | A/B slots, bootrom picks the newest valid one |
 | SD update file | one `.uf2` | `.bin` plus a `.json` manifest, verified by SHA-256 |
 | USB update | merged image via BOOTSEL | sealed image via `picotool` |
@@ -113,8 +122,12 @@ Notes:
   K1 (eject) is deliberately the only working key. Saving an untrusted image is
   blocked by design.
 
-System Tools also holds an SD card check, a System Info page, and an LED test
-that blinks the activity LED for five seconds.
+System Tools also holds an SD card check, a System Info page, and an
+LED & Motor Test that blinks the activity LED and runs the vibration motor for
+five seconds. Its Motor section controls the haptics: a global motor switch,
+one toggle per cue (cartridge, transfer, alerts, long press), and the
+load/save motor run with a selectable spin-down tail (off, 250 ms, 500 ms
+or 1 s).
 
 ## Hot-swap handling
 
@@ -208,7 +221,12 @@ Two behaviours worth knowing:
 If an update leaves the device misbehaving, System Tools offers Revert Firmware
 while the other slot still holds a working image.
 
-This repository does not include a Bluetooth upload client.
+The firmware-upload client lives in the companion app; this repository does
+not ship one. It does ship `tools/mdvtool.py`, a command line BLE client for
+the file side — browse, upload, download, rename and cartridge labels, from
+the Connect mode in System Tools — and
+[docs/BLE_PROTOCOL.md](docs/BLE_PROTOCOL.md), which documents the wire
+protocol for anyone writing their own client.
 
 ### USB BOOTSEL
 
@@ -232,7 +250,9 @@ picotool load -v -x MicroPicoDrive_v<M.m.p>.uf2
 ```
 
 A first install on the Pico 2 W also needs the partition table and the radio
-firmware written once, before the application image.
+firmware written once, before the application image;
+`tools\install_mainline.ps1` runs that whole sequence against a board waiting
+in BOOTSEL mode.
 
 ## Building
 
@@ -241,8 +261,8 @@ the board explicitly, which matters because `PICO_BOARD` is a CMake cache
 variable and the build directories persist between runs.
 
 ```powershell
-powershell -File tools\build_lite.ps1 -Major 2 -Minor 7 -Patch 0
-powershell -File tools\build_ota.ps1  -Major 2 -Minor 7 -Patch 0
+powershell -File tools\build_lite.ps1 -Major 2 -Minor 10 -Patch 1
+powershell -File tools\build_ota.ps1  -Major 2 -Minor 10 -Patch 1
 ```
 
 Both builds share one version line since v2.6.0: a release always covers both
@@ -251,7 +271,8 @@ boards, because a change to the shared tree rebuilds both images.
 Any board other than `pico` or `pico2_w` stops the configure step with an
 error rather than producing an image that resembles one of the two.
 
-Patch numbers are capped at 0 to 99 on both builds. The Pico 2 W firmware seal
+Patch numbers are capped at 0 to 98 — 99 is reserved for the OTA-test image
+that `build_ota.ps1` emits alongside each release. The Pico 2 W firmware seal
 and the BLE protocol carry only a major and a minor field, so ordering there
 uses `minor * 100 + patch`.
 
