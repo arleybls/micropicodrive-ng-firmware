@@ -17,6 +17,7 @@ tools/install_lite.ps1
 tools/reinstall_lite.ps1
 tools/install_p4.ps1
 tools/ota_bletest.py
+tools/publish_release.ps1
 
 # Boot-animation source assets and converters: local only
 images/
