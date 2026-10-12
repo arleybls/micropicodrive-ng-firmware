@@ -152,6 +152,9 @@ The button labels are K1 through K4; a long press is approximately one second.
 | Hold K3 | Tag or untag image for auto-load | No special save action | On `Pair Device`, request forgetting all pairings |
 | Hold K4 | Pico 2 W: shortcut to Connect | Eject first | Use the displayed mode's controls |
 
+Hold K4 while the drive powers up and it switches the display Panel type — a
+rescue for a screen you cannot read. See **Panel** under UI Options.
+
 Folders appear in brackets. Select `[..]` to go up one folder.
 During QL drive activity the normal cartridge buttons are ignored; wait for
 the QL operation to finish. The activity LED indicates drive selection/activity
@@ -256,6 +259,27 @@ Press K3 repeatedly to cycle a setting. The label shows the current value.
 | Dark Mode / Light Mode | Dark or Light | Dark | Switches display background/text and selection colours |
 | Path Bar | On, Off | Off | Shows or hides the red path title bar in the file browser |
 | Rainbow | Top Left, Top Right, Btm Left, Btm Right, Off | Top Right | Positions or hides the Sinclair rainbow corner decoration |
+| Panel | Type 1, Type 2 | Type 2 | Matches the setting to the display fitted to your cartridge |
+
+**About Panel.** Two versions of the 0.96" display module are sold, and they
+need slightly different settings. If your screen shows the wrong colours — red
+looking light blue, white looking black — or a thin line of speckled rubbish
+down one or two edges, switch this to the other type. The picture corrects
+itself immediately. Everything else is unaffected, so if the screen already
+looks right, leave it alone.
+
+There is no way for the drive to detect which display you have, which is why
+you pick it here.
+
+You do not have to find this menu to change it, which matters when the screen
+is the thing that is hard to read. **Hold K4 while the drive powers up**: the
+Panel type switches before the display is even started, so it comes up in the
+other setting, and a buzz confirms it. The choice is saved straight away, so
+you only do it once.
+
+New drives are set to **Type 2**, the version currently being sold. If you have
+an older drive that has been working fine, an update leaves it on Type 1 and
+nothing changes for you.
 
 ### Motor
 
@@ -392,6 +416,7 @@ hardware's USB power arrangement before servicing an installed mainboard.
 | Different card / Save blocked | Reinsert the original card and retry K3 without ejecting the image |
 | Save failed / Retry save! | Keep power on and the image mounted, resolve card access/free-space problems and retry; the on-card image may already be incomplete |
 | Event lost | The RAM image is untrusted. Only K1 eject works; saving is blocked. Reload a known-good saved image |
+| Colours look wrong, or a speckled line down an edge | Hold K4 while powering up to switch the display Panel type, or change **Panel** in UI Options |
 | Settings did not persist | Leave Tools through Exit or K4 before power-off; settings cannot be saved while the drive is in use |
 | SD Check absent | Fit a readable card, leave Tools and reopen it |
 | No vibration | Check Motor and the individual event settings; try LED & Motor Test, then inspect optional hardware with power disconnected |

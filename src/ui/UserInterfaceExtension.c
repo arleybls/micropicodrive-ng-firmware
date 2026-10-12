@@ -139,10 +139,31 @@ extern uint8_t _colstart, _rowstart, _tft_type;
 // Shared row render buffer — UIEXT_DISPLAY_WIDTH × UIEXT_MENU_CHAR_HEIGHT × 2 bytes.
 static uint8_t menu_row_buf[UIEXT_DISPLAY_WIDTH * UIEXT_MENU_CHAR_HEIGHT * 2];
 
+// ── Display panel profiles ───────────────────────────────────────────────────
+// Two batches of the 0.96" module behave differently, measured on the bench
+// with tools/lcd_probe.c. Type 1 needs inverted mode and starts at 26/1; Type 2
+// needs it off and starts at 24/0. Getting either wrong is visible but not
+// fatal: wrong inversion complements every pixel (red reads cyan, white black),
+// and a wrong offset leaves a 1-2 px garbage line along two edges.
+static const struct {
+    bool    invert;
+    uint8_t colstart;
+    uint8_t rowstart;
+} PANEL_PROFILES[UIEXT_PANEL_COUNT] = {
+    { true,  26, 1 },   // Type 1: the original batch
+    { false, 24, 0 },   // Type 2
+};
+static int s_panel = UIEXT_PANEL_TYPE2;   // the batch currently shipping
+
+int  uiext_panel_get(void) { return s_panel; }
+void uiext_panel_set(int profile) {
+    if (profile >= 0 && profile < UIEXT_PANEL_COUNT) s_panel = profile;
+}
+
 // ── Custom display init for 80 × 160 ST7735S ─────────────────────────────────
 // The library's built-in variants target 128 × 160. This variant sets the
-// correct CASET/RASET window (0–79 cols, 0–159 rows) and stores the 26-pixel
-// column offset so setAddrWindow maps logical (0,0) → hardware (26,1).
+// correct CASET/RASET window (0–79 cols, 0–159 rows) and stores the selected
+// profile's start offsets, which setAddrWindow adds to every logical (0,0).
 static void TFT_80x160_Initialize(void) {
 #if defined TFT_ENABLE_RESET
     TFT_ResetPIN();
@@ -156,13 +177,11 @@ static void TFT_80x160_Initialize(void) {
     write_data(0x00); write_data(0x00);
     write_data(0x00); write_data(0x9F);  // 0..159 rows
     Rcmd3();
-    // This 0.96" 80x160 ST7735S variant needs inverted mode — without it the
-    // panel complements every pixel (red showed as yellow, white as black).
-    write_command(ST7735_INVON);
+    write_command(PANEL_PROFILES[s_panel].invert ? ST7735_INVON : ST7735_INVOFF);
     write_command(ST7735_MADCTL);
     write_data(0xC0);                    // black-tab orientation
-    _colstart = 26;
-    _rowstart  = 1;
+    _colstart = PANEL_PROFILES[s_panel].colstart;
+    _rowstart = PANEL_PROFILES[s_panel].rowstart;
     _tft_type  = 1;
 }
 
@@ -706,13 +725,14 @@ enum { CFG_CAPTION, CFG_THEME, CFG_PATHBAR, CFG_RAINBOW, CFG_CONNECT, CFG_OTA, C
        CFG_SEP_UI,     // non-selectable "UI" group separator (dotted rules)
        CFG_SEP_MOTOR,  // ditto for the haptic-event toggles
        CFG_VIB_MASTER, CFG_VIB_CART, CFG_VIB_XFER, CFG_VIB_ALERT, CFG_VIB_LP,
-       CFG_VIB_SDOP };
-#define CFG_MAX_ITEMS 22
+       CFG_VIB_SDOP, CFG_PANEL };
+#define CFG_MAX_ITEMS 23
 
 static bool cfg_is_sep(int id) { return id == CFG_SEP_UI || id == CFG_SEP_MOTOR; }
 #define UIEXT_SEP_RULE_COLOR 0xF7BE   // whitesmoke (RGB 245,245,245), both themes
 
 static const char *const caption_labels[] = { "Top", "Mid", "Bottom" };
+static const char *const panel_labels[] = { "Type 1", "Type 2" };
 
 // Push one config band with the window frame baked into the pixel buffer.
 static void draw_cfg_band(int band_idx, const char *label,
@@ -1366,6 +1386,7 @@ static bool run_config_menu(void) {
         ids[count++] = CFG_THEME;
         ids[count++] = CFG_PATHBAR;
         ids[count++] = CFG_RAINBOW;
+        ids[count++] = CFG_PANEL;
 #if UIEXT_VIBRO_ENABLED
         ids[count++] = CFG_SEP_MOTOR;   // haptic-event toggles
         ids[count++] = CFG_VIB_MASTER;
@@ -1406,6 +1427,10 @@ static bool run_config_menu(void) {
                     case CFG_RAINBOW:
                         snprintf(label, sizeof(label), "Rainbow: %s",
                                  rainbow_labels[s_rainbow_pos]);
+                        break;
+                    case CFG_PANEL:
+                        snprintf(label, sizeof(label), "Panel: %s",
+                                 panel_labels[uiext_panel_get()]);
                         break;
                     case CFG_CONNECT: snprintf(label, sizeof(label), "Connect");     break;
                     case CFG_OTA:     snprintf(label, sizeof(label), "Update Firmware"); break;
@@ -1506,6 +1531,14 @@ static bool run_config_menu(void) {
                     case CFG_RAINBOW:
                         // Repeated SELECT cycles TL -> TR -> BL -> BR -> Off.
                         s_rainbow_pos = (rainbow_pos_t)((s_rainbow_pos + 1) % (RB_OFF + 1));
+                        opts_dirty = true;
+                        break;
+                    case CFG_PANEL:
+                        // The profile is latched at panel init, so re-run the
+                        // whole display bring-up; the menu redraws on the next
+                        // pass of this loop.
+                        uiext_panel_set((uiext_panel_get() + 1) % UIEXT_PANEL_COUNT);
+                        setup_tft();
                         opts_dirty = true;
                         break;
 #if UIEXT_VIBRO_ENABLED

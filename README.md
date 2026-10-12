@@ -51,8 +51,14 @@ updating the device in the field. What it adds:
 - Guards against data loss: eject is refused while the QL is using the drive, a
   cartridge with unsaved changes asks before ejecting, and saving is blocked if
   the SD card was swapped after the image was loaded.
-- Persistent settings (theme, caption position, path bar, corner marker, and
-  the Motor haptic options) stored in flash.
+- Persistent settings (theme, caption position, path bar, corner marker, the
+  display panel profile, and the Motor haptic options) stored in flash.
+- Two display panel profiles. The 0.96" 80x160 module ships in two variants
+  that need different inversion and start offsets, and the display SPI has no
+  MISO line, so the controller cannot be identified at runtime. The profile is
+  a setting (System Tools -> UI Options -> Panel), and holding K4 through
+  power-on switches it before the panel is initialised — a recovery path that
+  does not require reading the screen it fixes.
 
 The upstream README does not document its firmware update mechanism or its UI
 workflow, so this list describes what this firmware does rather than claiming
@@ -107,7 +113,7 @@ than a Pico 2 W.
 | K1 (UP) | move up | eject (confirm if unsaved changes) | dialog: toggle Yes/No |
 | K2 (DOWN) | move down | eject (same confirm) | dialog: toggle Yes/No |
 | K3 (SELECT) | open dir / mount file; long press = auto-load tag | save cartridge to SD | dialog: confirm; BLE modes: cancel |
-| K4 (TOOLS) | System Tools | "Eject first" notice (tools need an ejected cartridge) | idle screens: System Tools; BLE modes: cancel; long press = BLE Connect (Pico 2 W) |
+| K4 (TOOLS) | System Tools | "Eject first" notice (tools need an ejected cartridge) | idle screens: System Tools; BLE modes: cancel; long press = BLE Connect (Pico 2 W); held through power-on = switch display panel profile |
 
 Notes:
 
@@ -133,7 +139,8 @@ LED & Motor Test that blinks the activity LED and runs the vibration motor for
 five seconds. Its Motor section controls the haptics: a global motor switch,
 one toggle per cue (cartridge, transfer, alerts, long press), and the
 load/save motor run with a selectable spin-down tail (off, 250 ms, 500 ms
-or 1 s).
+or 1 s). Its UI Options section carries the display panel profile alongside the
+theme, caption, path bar and corner marker.
 
 ## Hot-swap handling
 
