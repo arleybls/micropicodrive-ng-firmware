@@ -1114,8 +1114,27 @@ void process_user_interface()
                 uiState = IDLE;
             else
             {
+                //Panel-type rescue. K4 held as the display comes up - so held
+                //through power-on, or while fitting the cartridge - switches
+                //to the other panel profile BEFORE the panel is initialised.
+                //It exists because the symptom of a wrong profile (every
+                //colour complemented, a speckled line down two edges) is
+                //exactly what makes System Tools hard to read, so the fix
+                //must not depend on reading it.
+                bool panelSwitched = (gpio_get(PIN_BTN_SYSTEM) == 0);
+                if(panelSwitched)
+                    uiext_panel_set((uiext_panel_get() + 1) % UIEXT_PANEL_COUNT);
+
                 if(init_screen())
                 {
+                    //Persist the switch: same safe window as the SD updater
+                    //just below - display up, no cartridge loaded yet - so
+                    //one power-on gesture is enough and it survives a reboot.
+                    if(panelSwitched)
+                    {
+                        config_save_settings();
+                        uiext_vibrate_event(UIEXT_VEV_CART);
+                    }
                     //Alternative update path: firmware dropped in SD:/.update —
                     //display is up, cartridge not loaded yet, so the flash
                     //writes are safe. No-op without SD/folder. UNCONDITIONAL:
@@ -1953,6 +1972,10 @@ typedef struct {
     uint8_t  vibro_lp;
     uint8_t  vibro_sdop;    //Load/Save tail index 0-3, not a boolean
     uint8_t  vibro_master;
+    //Display panel profile index. Range-checked on load, so a pre-feature
+    //record's erased-flash 0xFF keeps the Type 1 default and units already in
+    //the field are unaffected by an update - no SETTINGS_MAGIC roll needed.
+    uint8_t  panel;
 } settings_rec_t;
 
 static void settings_flash_write_cb(void *param)
@@ -1986,6 +2009,7 @@ void config_save_settings(void)
         .vibro_lp     = uiext_vibro_ev_get(UIEXT_VEV_LONGPRESS) ? 1 : 0,
         .vibro_sdop   = (uint8_t)uiext_vibro_sdop_get(),
         .vibro_master = uiext_vibro_master_get() ? 1 : 0,
+        .panel        = (uint8_t)uiext_panel_get(),
     };
     memcpy(page, &rec, sizeof(rec));
 
@@ -2018,6 +2042,11 @@ static void config_load_settings(void)
     uiext_vibro_ev_set(UIEXT_VEV_LONGPRESS, rec->vibro_lp    != 0);
     uiext_vibro_sdop_set(rec->vibro_sdop);   //out-of-range (0xFF) = keep default
     uiext_vibro_master_set(rec->vibro_master != 0);
+    //0xFF means this record was written before the panel setting existed, and
+    //only Type 1 panels existed then - so it means Type 1, NOT "keep the
+    //default", which is now Type 2 for the batch currently shipping. A unit
+    //with no record at all returns above and keeps that Type 2 default.
+    uiext_panel_set(rec->panel == 0xFF ? UIEXT_PANEL_TYPE1 : rec->panel);
 #endif
 }
 

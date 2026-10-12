@@ -267,3 +267,26 @@ if(NOT UIEXT_OTA_ENABLED)
     add_custom_target(full_uf2 ALL DEPENDS ${CMAKE_BINARY_DIR}/MicroPicoDrive-full.uf2)
 endif()
 
+
+# Bench tool, off by default: a panel probe that puts the ST7735 init
+# variables (inversion, colour order, start offsets) on K1-K4 so an unknown
+# 80x160 module can be dialled in without a rebuild per guess. See
+# tools/lcd_probe.c for the build and flash recipe.
+option(MPD_BUILD_LCD_PROBE "Build the LCD panel probe (tools/lcd_probe.c)" OFF)
+if(MPD_BUILD_LCD_PROBE)
+    add_executable(lcd_probe tools/lcd_probe.c)
+    target_compile_definitions(lcd_probe PRIVATE ${MPD_TFT_DEFINES})
+    target_include_directories(lcd_probe PRIVATE
+            ${CMAKE_CURRENT_LIST_DIR}/src/ui
+            ${CMAKE_CURRENT_LIST_DIR}/src/lib-st7735/include)
+    target_link_libraries(lcd_probe pico_stdlib hardware_spi st7735)
+    pico_set_program_name(lcd_probe "MicroPicoDrive-lcd-probe")
+    # RAM-only image: the probe never touches flash, so the installed firmware
+    # survives and a power cycle brings it back. On the RP2350 that also sidesteps
+    # the A/B partition table, where an unsealed image in a slot would lose the
+    # version comparison against the sealed firmware in the other one.
+    pico_set_binary_type(lcd_probe no_flash)
+    pico_enable_stdio_uart(lcd_probe 0)
+    pico_enable_stdio_usb(lcd_probe 0)
+    pico_add_extra_outputs(lcd_probe)
+endif()

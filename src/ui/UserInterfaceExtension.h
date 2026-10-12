@@ -203,6 +203,19 @@ void uiext_system_tools(void);
 int  uiext_rainbow_get(void);
 void uiext_rainbow_set(int pos);   // out-of-range values are ignored
 
+// Display panel profile. Two batches of the 0.96" 80x160 module are in
+// circulation and want different inversion and start offsets; the display SPI
+// has no MISO, so the controller's ID registers cannot be read and the two
+// cannot be told apart at runtime. Hence a setting. It defaults to Type 2, the
+// batch currently shipping; a unit that already has saved settings is held at
+// Type 1 on load instead (see config_load_settings), since only Type 1 panels
+// existed when that record was written. Takes effect at the next panel init,
+// so System Tools re-inits the display when it changes, and K4 held at
+// power-on switches it before the panel is brought up at all.
+enum { UIEXT_PANEL_TYPE1, UIEXT_PANEL_TYPE2, UIEXT_PANEL_COUNT };
+int  uiext_panel_get(void);
+void uiext_panel_set(int profile);   // out-of-range values are ignored
+
 // Event haptics: one buzz (double for UIEXT_VEV_ALERT) when the event's
 // enable is on; no-op otherwise or when vibro is compiled out. The per-event
 // enables (default on) are persisted like the rainbow position.
