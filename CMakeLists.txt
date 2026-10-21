@@ -123,8 +123,8 @@ add_executable(MicroPicoDrive ${MPD_SOURCES})
 # Lite and mainline share ONE version line since v2.6.0 (they build from the
 # same tree, so every release covers both products).
 set(MPD_FW_VERSION_MAJOR 2 CACHE STRING "Firmware major version")
-set(MPD_FW_VERSION_MINOR 10 CACHE STRING "Firmware minor version")
-set(MPD_FW_VERSION_PATCH 1 CACHE STRING "Firmware patch version")
+set(MPD_FW_VERSION_MINOR 11 CACHE STRING "Firmware minor version")
+set(MPD_FW_VERSION_PATCH 0 CACHE STRING "Firmware patch version")
 target_compile_definitions(MicroPicoDrive PRIVATE
         ${MPD_TFT_DEFINES}
         UIEXT_FW_VERSION_MAJOR=${MPD_FW_VERSION_MAJOR}
