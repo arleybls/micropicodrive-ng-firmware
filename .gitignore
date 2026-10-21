@@ -30,6 +30,10 @@ tools/publish_release.ps1
 # Duck-vote boards (session working material, mirrored to a Claude artifact)
 ducks/
 
+# Companion-app debug logs pulled off a phone: owner's working material, and
+# they carry the phone model and the unit's BLE address. Local only.
+debug/
+
 # Local History extension snapshots (can contain copies of excluded files)
 .history/
 
