@@ -8,6 +8,7 @@ docs/*
 !docs/BLE_PROTOCOL.md
 !docs/FIRMWARE_MANUAL.md
 !docs/FIRMWARE_MANUAL.pdf
+!docs/MDVPATCH_MANUAL.md
 !docs/images/
 !docs/images/rainbow.png
 
