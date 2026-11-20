@@ -1,19 +1,24 @@
-// QL select-clock probe (diagnostic build only, -DMPD_QL_PROBE=ON).
-// Counts the clock pulses in each select burst so a "well-formed burst" rule
-// can be written from measurements. Observes only: select handling is unchanged.
+// QL select-clock counter and drive mode pill.
+//
+// Counts the clock pulses in each select burst the QL sends. Selecting drive n
+// is a burst of n pulses, so the burst that leaves this unit selected gives its
+// own position in the chain; that number is shown in a pill at the top-right.
+// Observes only: select handling is unchanged.
+//
+// -DMPD_QL_PROBE=ON adds a System Tools page with the raw burst counts.
 #ifndef QL_PROBE_H
 #define QL_PROBE_H
 
 #include <stdbool.h>
 
 void ql_probe_init(void);   // once, on the UI core
-void ql_probe_task(void);   // drain the burst counter; call from the main loop
-void ql_probe_pill(void);   // drain, then restamp the corner pill: "B" until a
-                            // clean 8-pulse burst is seen, "Q" after, and the
-                            // drive number once the QL has selected this unit.
-                            // Call only while the display is up.
+void ql_probe_task(void);   // read the counter; call from the main loop
+void ql_probe_pill(void);   // ql_probe_task(), then keep the pill up to date.
+                            // Call only on the browser and cartridge screens.
 bool ql_probe_pill_enabled(void);
-void ql_probe_pill_enable(bool on);   // not persisted
-void ql_probe_run(void);  // System Tools page (blocks until a key is pressed)
+void ql_probe_pill_enable(bool on);
+#if MPD_QL_PROBE
+void ql_probe_run(void);    // System Tools page (blocks until a key is pressed)
+#endif
 
 #endif

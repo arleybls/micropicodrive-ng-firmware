@@ -121,6 +121,10 @@ LRUN mdv2_boot
 The QL only starts a cartridge by itself from drive 1. In any other drive you
 have to type the `LRUN` line.
 
+Not sure which drive a MicroPicoDrive is? Once the QL has used it, the small
+green box at the top-right of its screen shows the number: `1` for `mdv1_`, `2`
+for `mdv2_`.
+
 ## Example 3: go back to drive 1
 
 Keep your original file and you never need this. If you only have the patched

@@ -52,13 +52,22 @@ updating the device in the field. What it adds:
   cartridge with unsaved changes asks before ejecting, and saving is blocked if
   the SD card was swapped after the image was loaded.
 - Persistent settings (theme, caption position, path bar, corner marker, the
-  display panel profile, and the Motor haptic options) stored in flash.
+  display panel profile, the drive mode pill, and the Motor haptic options)
+  stored in flash.
 - Two display panel profiles. The 0.96" 80x160 module ships in two variants
   that need different inversion and start offsets, and the display SPI has no
   MISO line, so the controller cannot be identified at runtime. The profile is
   a setting (System Tools -> UI Options -> Panel), and holding K4 through
   power-on switches it before the panel is initialised — a recovery path that
   does not require reading the screen it fixes.
+- Drive mode pill. The unit learns which Microdrive it is by counting the clock
+  pulses of the QL's select burst (selecting drive n is n pulses, and 8 pulses
+  deselects every drive) and shows the number in the corner of the screen. Until
+  it has seen a QL it shows `B`, for bench. Nothing is configured, and select
+  handling is untouched. It can be hidden in System Tools -> UI Options.
+- `tools/mdvpatch.py` rewrites the drive names hardcoded inside an `.MDV` image
+  (`mdv1_` to `mdv2_` and back), so software written for drive 1 runs from
+  another drive. See [docs/MDVPATCH_MANUAL.md](docs/MDVPATCH_MANUAL.md).
 
 The upstream README does not document its firmware update mechanism or its UI
 workflow, so this list describes what this firmware does rather than claiming
@@ -139,8 +148,8 @@ LED & Motor Test that blinks the activity LED and runs the vibration motor for
 five seconds. Its Motor section controls the haptics: a global motor switch,
 one toggle per cue (cartridge, transfer, alerts, long press), and the
 load/save motor run with a selectable spin-down tail (off, 250 ms, 500 ms
-or 1 s). Its UI Options section carries the display panel profile alongside the
-theme, caption, path bar and corner marker.
+or 1 s). Its UI Options section carries the display panel profile and the drive
+mode pill switch alongside the theme, caption, path bar and corner marker.
 
 ## Hot-swap handling
 
@@ -163,6 +172,10 @@ around that mating order:
   signals while detect still reads present. A streak of consecutive SD errors
   is therefore treated as a probable removal — the lines are tri-stated and
   presence is re-evaluated, which also recovers a badly seated cartridge.
+- **No cue during QL access**: the insertion blink and the insertion and
+  removal buzzes are blocking waits on the loop that refills the drive's
+  buffers, so they are skipped while the QL has the drive selected. The
+  hot-swap itself is handled as above.
 
 ## Firmware update
 
@@ -274,9 +287,21 @@ the board explicitly, which matters because `PICO_BOARD` is a CMake cache
 variable and the build directories persist between runs.
 
 ```powershell
-powershell -File tools\build_lite.ps1 -Major 2 -Minor 10 -Patch 1
-powershell -File tools\build_ota.ps1  -Major 2 -Minor 10 -Patch 1
+powershell -File tools\build_lite.ps1
+powershell -File tools\build_ota.ps1
 ```
+
+Without arguments both scripts build the version set in `CMakeLists.txt`
+(`MPD_FW_VERSION_MAJOR`, `_MINOR`, `_PATCH`), so that file is the one place a
+release number is changed. `-Major`, `-Minor` and `-Patch` override it for a
+one-off build.
+
+Two CMake options, both off by default, add bench tools:
+
+| Option | Adds |
+|---|---|
+| `-DMPD_QL_PROBE=ON` | A **QL Probe** page in System Tools showing the pulse count of each select burst the QL sends, the select count and the learned drive number |
+| `-DMPD_BUILD_LCD_PROBE=ON` | A separate RAM-only image, `lcd_probe`, for dialling in an unknown display module (see `tools/lcd_probe.c`) |
 
 Both builds share one version line since v2.6.0: a release always covers both
 boards, because a change to the shared tree rebuilds both images.

@@ -23,9 +23,7 @@
 #include "sd_menu.h"
 #include "sd_thumb.h"
 #include "sys_info.h"
-#if MPD_QL_PROBE
 #include "ql_probe.h"
-#endif
 // Both boards need this: cfInserted/mdInUse (radio-mode gate on 2 W, BOOTSEL
 // eject gate on Lite), PIN_LED_ACTIVITY for the LED Test entry, and
 // config_save_settings(). Gating it broke the RP2040 build — study trap T3.
@@ -412,23 +410,62 @@ static void rasterize_row(uint8_t *buf, const char *label,
     }
 }
 
-#if MPD_QL_PROBE
-// Diagnostic build: one-character pill stamped over the top-right corner.
-void uiext_probe_pill(char c, uint16_t bg) {
+// ── Drive mode pill ───────────────────────────────────────────────────────────
+// One character in a small box at the top-right, showing the drive number the
+// unit has learned from the QL (ql_probe.c decides what, if anything, to show).
+// Kept as a ready-made bitmap so the list rows can composite it into their own
+// SPI burst, like the rainbow: no flicker when the list repaints or scrolls.
+// It sits in rows 4-18, clear of a top rainbow strip (rows 0-3), and those are
+// also the rows the glyph occupies in a text band, so it lines up with row 0.
+#define PILL_Y0     4
+#define PILL_H      15
+#define PILL_MAX_W  20
+static uint8_t s_pill_px[PILL_MAX_W * PILL_H * 2];
+static int     s_pill_w;   // 0 = nothing to show
+
+static int pill_x0(void) { return UIEXT_DISPLAY_WIDTH - s_pill_w - 1; }
+
+// c == 0 removes the pill. Uses menu_row_buf as scratch: not to be called
+// between rasterising a row and sending it.
+void uiext_pill_set(char c, uint16_t bg) {
+    if (!c) { s_pill_w = 0; return; }
     const char s[2] = { c, '\0' };
-    const int top = 3, rows = 15;     // slice of the text row holding the glyph
     int w = (int)label_pixel_width(s) + 8;
+    if (w > PILL_MAX_W) w = PILL_MAX_W;
     rasterize_row(menu_row_buf, s, ST7735_BLACK, bg, 4);
-    setAddrWindow((uint8_t)(UIEXT_DISPLAY_WIDTH - w - 1), 1,
-                  (uint8_t)(UIEXT_DISPLAY_WIDTH - 2), (uint8_t)rows);
+    for (int r = 0; r < PILL_H; r++)
+        memcpy(s_pill_px + r * w * 2,
+               menu_row_buf + (PILL_Y0 + r) * UIEXT_DISPLAY_WIDTH * 2, (size_t)w * 2);
+    s_pill_w = w;
+}
+
+// Copy between the pill's footprint in a full-width buffer (blitted at screen
+// row buf_y0, buf_h rows) and a pill-sized bitmap. to_buf: bitmap -> buffer.
+static void pill_copy(uint8_t *buf, int buf_y0, int buf_h, uint8_t *bitmap, bool to_buf) {
+    for (int r = 0; r < PILL_H; r++) {
+        int sy = PILL_Y0 + r;
+        if (sy < buf_y0 || sy >= buf_y0 + buf_h) continue;
+        uint8_t *in_buf = buf + ((sy - buf_y0) * UIEXT_DISPLAY_WIDTH + pill_x0()) * 2;
+        uint8_t *in_bmp = bitmap + r * s_pill_w * 2;
+        if (to_buf) memcpy(in_buf, in_bmp, (size_t)s_pill_w * 2);
+        else        memcpy(in_bmp, in_buf, (size_t)s_pill_w * 2);
+    }
+}
+
+static void pill_stamp(uint8_t *buf, int buf_y0, int buf_h) {
+    if (s_pill_w) pill_copy(buf, buf_y0, buf_h, s_pill_px, true);
+}
+
+// Direct draw, for screens that are not built from list rows.
+void uiext_pill_draw(void) {
+    if (!s_pill_w) return;
+    setAddrWindow((uint8_t)pill_x0(), PILL_Y0,
+                  (uint8_t)(pill_x0() + s_pill_w - 1), PILL_Y0 + PILL_H - 1);
     tft_dc_high();
     tft_cs_low();
-    for (int y = top; y < top + rows; y++)
-        spi_write_blocking(SPI_TFT_PORT, menu_row_buf + y * UIEXT_DISPLAY_WIDTH * 2,
-                           (size_t)w * 2);
+    spi_write_blocking(SPI_TFT_PORT, s_pill_px, (size_t)s_pill_w * PILL_H * 2);
     tft_cs_high();
 }
-#endif
 
 // ── CONFIG.CFG tag bar ────────────────────────────────────────────────────────
 // Red bar in the left gutter marking the auto-load-tagged item. The '*'
@@ -455,6 +492,7 @@ static void draw_menu_row(int row_idx, const char *label, bool tagged, bool sele
     if (tagged) tag_bar_stamp(menu_row_buf);
     uint8_t y = (uint8_t)(UIEXT_MENU_ROW_TOP + row_idx * UIEXT_MENU_ROW_PITCH);
     rainbow_stamp(menu_row_buf, y, UIEXT_MENU_CHAR_HEIGHT);
+    pill_stamp(menu_row_buf, y, UIEXT_MENU_CHAR_HEIGHT);
     setAddrWindow(0, y,
                   (uint8_t)(UIEXT_DISPLAY_WIDTH  - 1),
                   (uint8_t)(y + UIEXT_MENU_CHAR_HEIGHT - 1));
@@ -503,6 +541,7 @@ static void drawMenu(char **menu_items, int menu_size, int offset) {
         }
         draw_cfg_band(0, title, UIEXT_COLOR_CFG_TITLE_TEXT, UIEXT_COLOR_CFG_TITLE_BG,
                       UIEXT_MENU_TEXT_X + UIEXT_CFG_TEXT_PAD);
+        uiext_pill_draw();   // the title band is the top row here, not a list row
         first_row = 1;
     }
 
@@ -701,10 +740,11 @@ void uiext_cart_screen(const char *item_name, const char *caption) {
             spi_write_blocking(SPI_TFT_PORT, menu_row_buf, sizeof(menu_row_buf));
             tft_cs_high();
         }
+        uiext_pill_draw();
         return;
     }
 
-    if (!caption || !caption[0]) return;
+    if (!caption || !caption[0]) { uiext_pill_draw(); return; }
 
     // Horizontally centred caption (baseline y depends on caption position)
     int text_w = (int)label_pixel_width(caption);
@@ -733,6 +773,7 @@ void uiext_cart_screen(const char *item_name, const char *caption) {
     tft_cs_low();
     spi_write_blocking(SPI_TFT_PORT, menu_row_buf, sizeof(menu_row_buf));
     tft_cs_high();
+    uiext_pill_draw();   // after the caption: a top caption shares these rows
 }
 
 // ── System Tools menu ─────────────────────────────────────────────────────────
@@ -747,7 +788,8 @@ enum { CFG_CAPTION, CFG_THEME, CFG_PATHBAR, CFG_RAINBOW, CFG_CONNECT, CFG_OTA, C
        CFG_SEP_MOTOR,  // ditto for the haptic-event toggles
        CFG_VIB_MASTER, CFG_VIB_CART, CFG_VIB_XFER, CFG_VIB_ALERT, CFG_VIB_LP,
        CFG_VIB_SDOP, CFG_PANEL,
-       CFG_QLPROBE, CFG_PILL };  // diagnostic build only (MPD_QL_PROBE)
+       CFG_PILL,
+       CFG_QLPROBE };  // diagnostic build only (MPD_QL_PROBE)
 #define CFG_MAX_ITEMS 25
 
 static bool cfg_is_sep(int id) { return id == CFG_SEP_UI || id == CFG_SEP_MOTOR; }
@@ -1412,9 +1454,7 @@ static bool run_config_menu(void) {
         ids[count++] = CFG_PATHBAR;
         ids[count++] = CFG_RAINBOW;
         ids[count++] = CFG_PANEL;
-#if MPD_QL_PROBE
         ids[count++] = CFG_PILL;
-#endif
 #if UIEXT_VIBRO_ENABLED
         ids[count++] = CFG_SEP_MOTOR;   // haptic-event toggles
         ids[count++] = CFG_VIB_MASTER;
@@ -1460,12 +1500,10 @@ static bool run_config_menu(void) {
                         snprintf(label, sizeof(label), "Panel: %s",
                                  panel_labels[uiext_panel_get()]);
                         break;
-#if MPD_QL_PROBE
                     case CFG_PILL:
                         snprintf(label, sizeof(label), "Drive Mode Pill: %s",
                                  ql_probe_pill_enabled() ? "On" : "Off");
                         break;
-#endif
                     case CFG_CONNECT: snprintf(label, sizeof(label), "Connect");     break;
                     case CFG_OTA:     snprintf(label, sizeof(label), "Update Firmware"); break;
                     case CFG_PAIR:    snprintf(label, sizeof(label), "Pair Device"); break;
@@ -1568,12 +1606,10 @@ static bool run_config_menu(void) {
                         s_rainbow_pos = (rainbow_pos_t)((s_rainbow_pos + 1) % (RB_OFF + 1));
                         opts_dirty = true;
                         break;
-#if MPD_QL_PROBE
                     case CFG_PILL:
-                        // Not saved: test-build switch, back On at power-up.
                         ql_probe_pill_enable(!ql_probe_pill_enabled());
+                        opts_dirty = true;
                         break;
-#endif
                     case CFG_PANEL:
                         // The profile is latched at panel init, so re-run the
                         // whole display bring-up; the menu redraws on the next
@@ -1736,6 +1772,7 @@ static void draw_hscroll_row(const char *full_text, bool tagged, int scroll_px, 
                   UIEXT_MENU_LIST_TEXT_X - scroll_px);
     if (tagged) tag_bar_stamp(menu_row_buf);   // fixed in the gutter, text slides under
     rainbow_stamp(menu_row_buf, row_y, UIEXT_MENU_CHAR_HEIGHT);
+    pill_stamp(menu_row_buf, row_y, UIEXT_MENU_CHAR_HEIGHT);
     setAddrWindow(0, row_y,
                   (uint8_t)(UIEXT_DISPLAY_WIDTH  - 1),
                   (uint8_t)(row_y + UIEXT_MENU_CHAR_HEIGHT - 1));
@@ -1792,6 +1829,12 @@ static void blit_scratch_window(int read_y) {
         }
         rainbow_stamp(win, y0, win_h);
     }
+    // Same for the pill: its footprint is saved, stamped and put back.
+    uint8_t pill_saved[PILL_MAX_W * PILL_H * 2];
+    if (s_pill_w) {
+        pill_copy(win, y0, win_h, pill_saved, false);
+        pill_stamp(win, y0, win_h);
+    }
 
     setAddrWindow(0, y0,
                   (uint8_t)(UIEXT_DISPLAY_WIDTH  - 1),
@@ -1805,6 +1848,7 @@ static void blit_scratch_window(int read_y) {
     for (int i = 0; i < nsaved; i++)
         memcpy(win + saved_rows[i] * UIEXT_DISPLAY_WIDTH * 2,
                saved + i * UIEXT_DISPLAY_WIDTH * 2, UIEXT_DISPLAY_WIDTH * 2);
+    if (s_pill_w) pill_copy(win, y0, win_h, pill_saved, true);
 }
 
 static void do_vscroll(char **items, int item_count, int new_offset, int dir) {
@@ -1867,9 +1911,7 @@ int uiext_menu_run(char **items, int count, int *offset) {
 #endif
 
     while (true) {
-#if MPD_QL_PROBE
-        ql_probe_pill();
-#endif
+        ql_probe_pill();   // drive mode pill: appears here when the number is learned
         {   // card still there?
             uint32_t now_ms = to_ms_since_boot(get_absolute_time());
             if (now_ms >= next_sd_poll_ms) {

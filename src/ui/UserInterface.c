@@ -13,9 +13,7 @@
 #include "hw_config.h"  //sd_get_by_num
 #include "sd_menu.h"
 #include "UserInterfaceExtension.h"
-#if MPD_QL_PROBE
 #include "ql_probe.h"
-#endif
 #include "sd_update.h"          //both boards (trap T2) — CMake picks the flavour
 #if UIEXT_SETTINGS_PERSIST
 #include "pico/flash.h"          //flash_safe_execute (settings sector)
@@ -1984,6 +1982,8 @@ typedef struct {
     //record's erased-flash 0xFF keeps the Type 1 default and units already in
     //the field are unaffected by an update - no SETTINGS_MAGIC roll needed.
     uint8_t  panel;
+    //Drive mode pill on/off. A pre-feature record's 0xFF loads as "on".
+    uint8_t  drive_pill;
 } settings_rec_t;
 
 static void settings_flash_write_cb(void *param)
@@ -2018,6 +2018,7 @@ void config_save_settings(void)
         .vibro_sdop   = (uint8_t)uiext_vibro_sdop_get(),
         .vibro_master = uiext_vibro_master_get() ? 1 : 0,
         .panel        = (uint8_t)uiext_panel_get(),
+        .drive_pill   = ql_probe_pill_enabled() ? 1 : 0,
     };
     memcpy(page, &rec, sizeof(rec));
 
@@ -2055,6 +2056,7 @@ static void config_load_settings(void)
     //default", which is now Type 2 for the batch currently shipping. A unit
     //with no record at all returns above and keeps that Type 2 default.
     uiext_panel_set(rec->panel == 0xFF ? UIEXT_PANEL_TYPE1 : rec->panel);
+    ql_probe_pill_enable(rec->drive_pill != 0);
 #endif
 }
 
@@ -2068,9 +2070,7 @@ void RunUserInterface()
 
     init_buttons();     //buttons + PIN_UI_DETECT pull-up, before the IRQ arms
     cart_hotplug_init(); //tri-state cartridge pins (LED included), arm detect IRQ
-#if MPD_QL_PROBE
     ql_probe_init();
-#endif
 
     while(true)
     {
@@ -2101,11 +2101,12 @@ void RunUserInterface()
         }
 
         led_task();
-#if MPD_QL_PROBE
-        ql_probe_task();
-        if(cartPresent && uiState != IDLE && uiState != DELAY && uiState != INIT_SCREEN)
+        //Drive number learning runs always; the pill is only painted on the
+        //cartridge-ready screen (the browser paints it from its own loop).
+        if(cartPresent && uiState == CARTRIDGE_READY)
             ql_probe_pill();
-#endif
+        else
+            ql_probe_task();
 
         //While the QL is actively using the drive the UI is frozen: buttons
         //are ignored — including eject, which used to fire here instantly

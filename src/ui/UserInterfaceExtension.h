@@ -270,9 +270,11 @@ int uiext_menu_pick(const char *title, const char **items, int n);
 
 // Centered screens: title bar; status shows one centered body line; progress
 // draws "NN%" + centered counter (0-100).
-#if MPD_QL_PROBE
-void uiext_probe_pill(char c, uint16_t bg);   // diagnostic build: corner pill
-#endif
+// Drive mode pill (top-right corner): set the character and box colour once,
+// the list rows and the cartridge screen then draw it with themselves. c == 0
+// removes it. uiext_pill_draw() paints it straight onto the current screen.
+void uiext_pill_set(char c, uint16_t bg);
+void uiext_pill_draw(void);
 void uiext_ota_title(const char *title);
 void uiext_ota_status(const char *title, const char *body);
 void uiext_ota_status2(const char *title, const char *l1, const char *l2);  // two centered lines

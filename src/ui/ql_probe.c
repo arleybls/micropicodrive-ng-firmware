@@ -1,4 +1,4 @@
-// QL select-clock probe — see ql_probe.h.
+// QL select-clock counter and drive mode pill — see ql_probe.h.
 //
 // Two ways of counting the pulses on MD_SER_CLK, one per chip:
 //
@@ -148,24 +148,42 @@ void ql_probe_task(void) {
     s_selected = selected;
 }
 
-// Restamped twice a second because every screen redraw paints over it. Skipped
-// while the drive is selected: no display traffic during QL access.
+// The pill shows, in order of what is known:
+//   "B" (amber)  no deselect burst and no select yet: no QL has been seen, so
+//                the unit is on the bench or the QL has not touched a drive.
+//                Bench-tested 2026-11-20: over ten minutes with no QL attached
+//                and line noise never produced a clean burst, so it stays "B".
+//   nothing      a QL has been seen, but it has not selected this unit yet.
+//   "1".."8"     (green) the drive number, once the QL has selected this unit.
+// The screens draw it with themselves (uiext_pill_set hands them the bitmap);
+// this only paints it straight onto the display at the moment it changes, and
+// never while the drive is selected: no display traffic during QL access.
+#define PILL_GREEN 0x07E0
+#define PILL_AMBER 0xFD20
 static bool s_pill_on = true;
+static char s_pill_set, s_pill_drawn;
 
 bool ql_probe_pill_enabled(void) { return s_pill_on; }
 void ql_probe_pill_enable(bool on) { s_pill_on = on; }
 
 void ql_probe_pill(void) {
-    static uint32_t next_ms;
     ql_probe_task();
-    uint32_t now = to_ms_since_boot(get_absolute_time());
-    if (!s_pill_on || s_selected || now < next_ms) return;
-    next_ms = now + 500;
-    if (s_drive)        uiext_probe_pill((char)('0' + s_drive), 0x07E0);  // green: drive number
-    else if (s_hist[8]) uiext_probe_pill('Q', 0x07E0);   // green: QL seen, number not yet
-    else                uiext_probe_pill('B', 0xFD20);   // amber: bench presumed
+    char want = 0;
+    if (s_pill_on) {
+        if (s_drive)          want = (char)('0' + s_drive);
+        else if (!s_hist[8])  want = 'B';
+    }
+    if (want != s_pill_set) {
+        uiext_pill_set(want, want == 'B' ? PILL_AMBER : PILL_GREEN);
+        s_pill_set = want;
+    }
+    if (s_pill_drawn != s_pill_set && !s_selected) {
+        uiext_pill_draw();   // draws nothing when the pill was removed: the
+        s_pill_drawn = s_pill_set;   // next repaint of the screen clears it
+    }
 }
 
+#if MPD_QL_PROBE
 static bool any_key(void) {
     return gpio_get(UIEXT_BTN_UP) == 0 || gpio_get(UIEXT_BTN_DOWN) == 0 ||
            gpio_get(UIEXT_BTN_SELECT) == 0 || gpio_get(UIEXT_BTN_CONFIG) == 0;
@@ -222,3 +240,4 @@ void ql_probe_run(void) {
         sleep_ms(10);
     }
 }
+#endif  // MPD_QL_PROBE

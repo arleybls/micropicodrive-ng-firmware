@@ -1,4 +1,4 @@
-; QL select-clock burst counter (bench/diagnostic build only, MPD_QL_PROBE).
+; QL select-clock burst counter (Pico 2 W; see ql_probe.c).
 ;
 ; Watches the Microdrive select clock and reports how many pulses each burst
 ; carried. A burst ends when the clock has stayed low for the idle timeout

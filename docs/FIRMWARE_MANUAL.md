@@ -18,6 +18,7 @@ vibration motor — is covered by the hardware installation manual in the
 - [System Tools reference](#system-tools-reference)
 - [Firmware updates](#firmware-updates)
 - [Troubleshooting](#troubleshooting)
+- [Addendum: running a cartridge from another drive](#addendum-running-a-cartridge-from-another-drive)
 - [Addendum: creating images with Sinclair MDV Builder](#addendum-creating-images-with-sinclair-mdv-builder)
 - [Addendum: the Bluetooth protocol for developers](#addendum-the-bluetooth-protocol-for-developers)
 
@@ -38,6 +39,7 @@ physically plugging in or pulling out the cartridge board.
 |---|---|---|
 | Image browsing, QL loading and saving | Yes | Yes |
 | Display and motor settings | Yes | Yes |
+| Drive number shown on screen | Yes | Yes |
 | SD card firmware updates | UF2 file | BIN file and matching JSON manifest |
 | Bluetooth file management and updates | No | Yes |
 | Revert Firmware | No | When another firmware slot is available |
@@ -136,6 +138,10 @@ the cartridge from loading.
    can read the mounted image. If it fails, check the image and drive position
    before investigating the physical installation with power disconnected.
 
+   After that first access, the small box at the top-right of the screen shows
+   which drive this unit is: `1` or `2`. See **Drive Mode Pill** under UI
+   Options.
+
 Before you save any real work, read **Loading programs and saving your work**
 below — saving on the QL and saving to the SD card are two separate steps.
 
@@ -212,6 +218,10 @@ removing the SD card or cartridge board. The cartridge board supports powered
 insertion/removal, but this does not preserve unsaved work or make interruption
 of an SD write safe. Never remove it during a firmware update.
 
+The drive normally answers an insertion with a short LED blink and a buzz, and
+a removal with a buzz. If the QL is using the drive at that moment, both are
+left out so the QL's access is not disturbed.
+
 If the SD card was swapped while an image remained mounted, saving may report
 **Different card / Save blocked**. Reinsert the original card and retry K3;
 the RAM image is retained. This protection compares volume serial numbers,
@@ -260,6 +270,7 @@ Press K3 repeatedly to cycle a setting. The label shows the current value.
 | Path Bar | On, Off | Off | Shows or hides the red path title bar in the file browser |
 | Rainbow | Top Left, Top Right, Btm Left, Btm Right, Off | Top Right | Positions or hides the Sinclair rainbow corner decoration |
 | Panel | Type 1, Type 2 | Type 2 | Matches the setting to the display fitted to your cartridge |
+| Drive Mode Pill | On, Off | On | Shows or hides the drive number, or `B` for bench, in the top-right corner |
 
 **About Panel.** Two versions of the 0.96" display module are sold, and they
 need slightly different settings. If your screen shows the wrong colours — red
@@ -281,6 +292,18 @@ New drives are set to **Type 2**, the version currently being sold. If you have
 an older drive that has been working fine, an update leaves it on Type 1 and
 nothing changes for you.
 
+**About Drive Mode Pill.** The drive works out which Microdrive it is from the
+way the QL addresses it, and shows the number in a small green box at the
+top-right of the file browser and the mounted-cartridge screen: `1` for `mdv1_`,
+`2` for `mdv2_`. You do not set this anywhere.
+
+After power-on the box is amber and shows `B`, for bench: the drive has not seen
+a QL yet. It stays that way on a drive powered outside a QL. Inside a QL the `B`
+goes away the first time the QL uses any drive, and the number appears the first
+time it uses this one. Any access will do, even a `DIR` with no image mounted.
+The number is forgotten at power-off and learned again next time, so a drive
+moved to the other position corrects itself.
+
 ### Motor
 
 These options only do something when the optional vibration motor is fitted.
@@ -289,7 +312,7 @@ They never affect the emulation or your saved cartridge data.
 | Setting | Values / default | Effect |
 |---|---|---|
 | Motor | On / Off; default On | Master switch for normal vibration feedback |
-| Cart | On / Off; default On | Feedback for physical cartridge-board insertion/removal detection |
+| Cart | On / Off; default On | Feedback for physical cartridge-board insertion/removal detection. Not given while the QL is using the drive |
 | Transfer | On / Off; default On | Completion feedback for supported Bluetooth transfer/update operations |
 | Alerts | On / Off; default On | Double-buzz feedback for error/alert events |
 | Long Press | On / Off; default On | Feedback when a button reaches its long-press threshold |
@@ -418,6 +441,8 @@ hardware's USB power arrangement before servicing an installed mainboard.
 | Save failed / Retry save! | Keep power on and the image mounted, resolve card access/free-space problems and retry; the on-card image may already be incomplete |
 | Event lost | The RAM image is untrusted. Only K1 eject works; saving is blocked. Reload a known-good saved image |
 | Colours look wrong, or a speckled line down an edge | Hold K4 while powering up to switch the display Panel type, or change **Panel** in UI Options |
+| `B` stays in the corner inside a QL | The QL has not used any drive since power-on. Type `DIR mdv1_`. If `B` is still there, the drive is not seeing the QL: check the installation with power disconnected |
+| No drive number in the corner | The QL has not used this drive yet. Type `DIR` for its position, or check that **Drive Mode Pill** is On in UI Options |
 | Settings did not persist | Leave Tools through Exit or K4 before power-off; settings cannot be saved while the drive is in use |
 | SD Check absent | Fit a readable card, leave Tools and reopen it |
 | No vibration | Check Motor and the individual event settings; try LED & Motor Test, then inspect optional hardware with power disconnected |
@@ -427,7 +452,23 @@ hardware's USB power arrangement before servicing an installed mainboard.
 One known quirk: a mainboard powered up on the bench, outside a QL, can pick
 up a false drive-select signal and leave the activity LED stuck on — which
 also blocks file operations and settings saves. Power-cycle the board and try
-again. Inside a QL this doesn't happen; it is purely a bench condition.
+again. Inside a QL this doesn't happen; it is purely a bench condition. The
+amber `B` in the corner of the screen tells you the drive is in that situation.
+
+## Addendum: running a cartridge from another drive
+
+Most QL software expects to be in drive 1, because the name `mdv1_` is written
+inside its boot program. Mounted in drive 2 it stops with "not found". The
+repository ships `tools/mdvpatch.py`, a small Python script that makes a copy of
+an `.MDV` image with those names changed, and can change them back:
+
+```
+python mdvpatch.py retarget Game.mdv --to mdv2
+```
+
+Start the copy with `LRUN mdv2_boot`. The original file is never modified. The
+drive number in the corner of the screen tells you which name a unit needs. The
+full instructions are in [MDVPATCH_MANUAL.md](MDVPATCH_MANUAL.md).
 
 ## Addendum: creating images with Sinclair MDV Builder
 
@@ -482,6 +523,7 @@ a working command line client that doubles as example code.
 Operation and menu details were checked against
 [UserInterface.c](../src/ui/UserInterface.c),
 [UserInterfaceExtension.c](../src/ui/UserInterfaceExtension.c),
+[drive number detection](../src/ui/ql_probe.c),
 [SD Check](../src/storage/sd_check.c),
 [System Info](../src/ui/sys_info.c),
 [filesystem configuration](../src/lib-sdcard/src/include/ffconf.h), and
