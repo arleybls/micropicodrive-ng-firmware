@@ -139,8 +139,8 @@ the cartridge from loading.
    before investigating the physical installation with power disconnected.
 
    After that first access, the small box at the top-right of the screen shows
-   which drive this unit is: `1` or `2`. See **Drive Mode Pill** under UI
-   Options.
+   which drive this unit is, `1` or `2`, in green. The drive remembers the
+   number from then on. See **Drive Mode Pill** under UI Options.
 
 Before you save any real work, read **Loading programs and saving your work**
 below — saving on the QL and saving to the SD card are two separate steps.
@@ -247,7 +247,8 @@ stays on each card in `CONFIG.CFG`.
 | System Info | Both | Shows firmware version, CPU type, clock, chip temperature, RAM used/free, flash capacity and application size |
 | LED & Motor Test | Both | Blinks the activity LED and runs the fitted motor for five seconds; intentionally bypasses the Motor on/off setting |
 | BOOTSEL Mode | Lite only | After confirmation, reboots into USB programming mode; normal drive operation stops |
-| Exit | Both | Leaves Tools and saves changed display/motor settings |
+| Auto Patch | Both | On / Off, default Off. Makes a mounted image run from this drive by changing the drive names inside it, in memory only. See **Auto Patch** below |
+| Exit | Both | Leaves Tools and saves changed settings |
 
 **SD Check writes to the card.** It creates or overwrites `UIEXTTST.BIN` in the
 root and deletes it when the read/check sequence completes. Do not keep your
@@ -258,6 +259,38 @@ Use K1/K2 to scroll diagnostic reports and K3/K4 to return. If you inserted a
 card while Tools was already open, exit and reopen Tools to make SD Check
 available. System Info temperature is the Pico's sensor reading, not a
 measurement of the whole QL.
+
+### Auto Patch
+
+**Auto Patch: On / Off** sits in the first part of System Tools, after LED &
+Motor Test. K3 switches it. It is off unless you turn it on, and it is saved
+with the other settings when you leave System Tools.
+
+Most QL software expects to be in drive 1: the name
+`mdv1_` is written inside its boot program. Mounted in drive 2, it looks for
+its files in drive 1 and stops with "not found". With Auto Patch on, the drive
+fixes this by itself. Each time you mount an image, every `mdv1_` to `mdv8_` it
+finds in the image's files is changed to this drive's own number.
+
+- The change is made to the copy in memory only. **The file on the SD card is
+  never changed**, not even when you press K3 to save: the original names are
+  put back for the save. The same image still works in any drive.
+- While it works the screen shows **Patching**. If any names were changed, the
+  mounted screen shows a green line under the image name, such as
+  **Patched to mdv2**. No line means nothing needed changing.
+- The drive has to know its number first. It remembers the number from the
+  last time the QL used it, so this normally just works: the number in the
+  corner, grey or green, is the one Auto Patch uses. On a drive that shows `?`
+  or `B`, or one you have just moved to the other position, use it once (a
+  `DIR` will do), then eject the image and mount it again.
+- Start the program with the name of the drive it is in, for example
+  `LRUN mdv2_boot`. The QL only starts a cartridge by itself from drive 1.
+
+Leave it off for software that really uses two drives, such as a copy program
+that reads `mdv1_` and writes `mdv2_`: with Auto Patch on, both names become
+this drive. It also cannot help a program that builds the drive name while it
+runs instead of storing it as text. To change a file on the card permanently,
+use the `mdvpatch` tool described in the addendum.
 
 ### UI Options
 
@@ -293,16 +326,28 @@ an older drive that has been working fine, an update leaves it on Type 1 and
 nothing changes for you.
 
 **About Drive Mode Pill.** The drive works out which Microdrive it is from the
-way the QL addresses it, and shows the number in a small green box at the
-top-right of the file browser and the mounted-cartridge screen: `1` for `mdv1_`,
-`2` for `mdv2_`. You do not set this anywhere.
+way the QL addresses it, and shows the number in a small box at the top-right
+of the file browser and the mounted-cartridge screen: `1` for `mdv1_`, `2` for
+`mdv2_`. You do not set this anywhere.
 
-After power-on the box is amber and shows `B`, for bench: the drive has not seen
-a QL yet. It stays that way on a drive powered outside a QL. Inside a QL the `B`
-goes away the first time the QL uses any drive, and the number appears the first
-time it uses this one. Any access will do, even a `DIR` with no image mounted.
-The number is forgotten at power-off and learned again next time, so a drive
-moved to the other position corrects itself.
+The box changes as the drive learns where it is:
+
+| Box | Meaning |
+|---|---|
+| Amber `B` | Bench: the drive has not seen a QL since power-on. It stays like this on a drive powered outside a QL |
+| Grey number | The QL is there, but has not used this drive yet. The number is the one remembered from last time |
+| Grey `?` | The same, on a drive that has no number remembered yet |
+| Green number | Confirmed: the QL has used this drive since power-on |
+
+Any access confirms the number, even a `DIR` with no image mounted. The drive
+then stores it in its own memory, a couple of seconds after the QL has finished
+and while no image is mounted, or when you next eject an image. After that it
+survives power-offs and firmware updates. A drive moved to the other position
+shows its old number in grey at first, and corrects itself the first time the
+QL uses it there.
+
+After a power-on inside a QL you will normally see `B` for a moment, then the
+grey number as soon as the QL uses any drive, then green once it uses this one.
 
 ### Motor
 
@@ -442,7 +487,11 @@ hardware's USB power arrangement before servicing an installed mainboard.
 | Event lost | The RAM image is untrusted. Only K1 eject works; saving is blocked. Reload a known-good saved image |
 | Colours look wrong, or a speckled line down an edge | Hold K4 while powering up to switch the display Panel type, or change **Panel** in UI Options |
 | `B` stays in the corner inside a QL | The QL has not used any drive since power-on. Type `DIR mdv1_`. If `B` is still there, the drive is not seeing the QL: check the installation with power disconnected |
-| No drive number in the corner | The QL has not used this drive yet. Type `DIR` for its position, or check that **Drive Mode Pill** is On in UI Options |
+| Grey `?` or a grey number in the corner | The QL has not used this drive since power-on, so the number is not confirmed. Type `DIR` for its position and it turns green |
+| The grey number is wrong | The drive was moved to another position. It corrects itself the first time the QL uses it |
+| Nothing in the corner at all | Check that **Drive Mode Pill** is On in UI Options |
+| "Not found" when starting a program from drive 2 | The program expects drive 1. Turn on **Auto Patch** in System Tools and mount the image again |
+| Auto Patch is on but no **Patched to** line appears | The drive does not know its number yet, or the image contains no drive names. Use the drive once from the QL, eject and mount again |
 | Settings did not persist | Leave Tools through Exit or K4 before power-off; settings cannot be saved while the drive is in use |
 | SD Check absent | Fit a readable card, leave Tools and reopen it |
 | No vibration | Check Motor and the individual event settings; try LED & Motor Test, then inspect optional hardware with power disconnected |
@@ -469,6 +518,10 @@ python mdvpatch.py retarget Game.mdv --to mdv2
 Start the copy with `LRUN mdv2_boot`. The original file is never modified. The
 drive number in the corner of the screen tells you which name a unit needs. The
 full instructions are in [MDVPATCH_MANUAL.md](MDVPATCH_MANUAL.md).
+
+The **Auto Patch** setting in System Tools does the same thing inside the drive,
+each time an image is mounted, without changing the file. Use the tool when you
+want a patched file to keep, for example for an emulator or another device.
 
 ## Addendum: creating images with Sinclair MDV Builder
 
@@ -524,6 +577,7 @@ Operation and menu details were checked against
 [UserInterface.c](../src/ui/UserInterface.c),
 [UserInterfaceExtension.c](../src/ui/UserInterfaceExtension.c),
 [drive number detection](../src/ui/ql_probe.c),
+[Auto Patch](../src/ui/autopatch.c),
 [SD Check](../src/storage/sd_check.c),
 [System Info](../src/ui/sys_info.c),
 [filesystem configuration](../src/lib-sdcard/src/include/ffconf.h), and

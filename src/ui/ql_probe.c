@@ -50,6 +50,30 @@ static void learn_drive(uint32_t n) {
     if (n >= 1 && n <= 8) s_drive = (uint8_t)n;
 }
 
+// The number remembered from an earlier power-on (saved with the settings).
+// The pill never shows it: it is only a best guess until the QL confirms it.
+static uint8_t s_drive_saved;
+
+uint8_t ql_probe_drive(void) { return s_drive ? s_drive : s_drive_saved; }
+
+// A number learned this session that flash does not hold yet, and the drive
+// has been left alone for a while (so the write does not land in the middle of
+// a run of QL accesses). The caller still has to check no image is mounted.
+#define DRIVE_SAVE_QUIET_US 2000000u
+static uint32_t s_deselect_us;
+
+bool ql_probe_drive_needs_save(void) {
+    static uint8_t asked;   // one request per learned number: a failed flash
+                            // write must not be retried on every pass
+    if (!s_drive || s_drive == s_drive_saved || s_drive == asked || s_selected ||
+        time_us_32() - s_deselect_us < DRIVE_SAVE_QUIET_US)
+        return false;
+    asked = s_drive;
+    return true;
+}
+uint8_t ql_probe_drive_saved(void) { return s_drive_saved; }
+void ql_probe_drive_set_saved(uint8_t n) { s_drive_saved = (n >= 1 && n <= 8) ? n : 0; }
+
 static void record_burst(uint32_t n) {
     s_burst_n = n;
     s_burst_us = time_us_32();
@@ -145,6 +169,7 @@ void ql_probe_task(void) {
             s_want_drive = true;
     }
     if (!selected) s_want_drive = false;
+    if (s_selected && !selected) s_deselect_us = time_us_32();
     s_selected = selected;
 }
 
@@ -153,28 +178,35 @@ void ql_probe_task(void) {
 //                the unit is on the bench or the QL has not touched a drive.
 //                Bench-tested 2026-11-20: over ten minutes with no QL attached
 //                and line noise never produced a clean burst, so it stays "B".
-//   nothing      a QL has been seen, but it has not selected this unit yet.
+//   "1".."8"     (grey) a QL has been seen but has not selected this unit
+//                yet: the number remembered from an earlier power-on, not
+//                confirmed. "?" in grey when no number is remembered.
 //   "1".."8"     (green) the drive number, once the QL has selected this unit.
 // The screens draw it with themselves (uiext_pill_set hands them the bitmap);
 // this only paints it straight onto the display at the moment it changes, and
 // never while the drive is selected: no display traffic during QL access.
 #define PILL_GREEN 0x07E0
 #define PILL_AMBER 0xFD20
+#define PILL_GREY  0x8410
 static bool s_pill_on = true;
-static char s_pill_set, s_pill_drawn;
+static uint32_t s_pill_set, s_pill_drawn;   // character | colour << 8; 0 = none
 
 bool ql_probe_pill_enabled(void) { return s_pill_on; }
 void ql_probe_pill_enable(bool on) { s_pill_on = on; }
 
 void ql_probe_pill(void) {
     ql_probe_task();
-    char want = 0;
+    char c = 0;
+    uint16_t colour = 0;
     if (s_pill_on) {
-        if (s_drive)          want = (char)('0' + s_drive);
-        else if (!s_hist[8])  want = 'B';
+        if (s_drive)             { c = (char)('0' + s_drive);       colour = PILL_GREEN; }
+        else if (!s_hist[8])     { c = 'B';                         colour = PILL_AMBER; }
+        else if (s_drive_saved)  { c = (char)('0' + s_drive_saved); colour = PILL_GREY; }
+        else                     { c = '?';                         colour = PILL_GREY; }
     }
+    uint32_t want = (uint8_t)c | ((uint32_t)colour << 8);
     if (want != s_pill_set) {
-        uiext_pill_set(want, want == 'B' ? PILL_AMBER : PILL_GREEN);
+        uiext_pill_set(c, colour);
         s_pill_set = want;
     }
     if (s_pill_drawn != s_pill_set && !s_selected) {

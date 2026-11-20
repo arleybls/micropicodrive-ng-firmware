@@ -14,6 +14,11 @@ too. Your original file is never touched.
 It works on standard `.MDV` cartridge images, the same files the MicroPicoDrive
 loads from its SD card.
 
+If you only use the images in a MicroPicoDrive, you may not need this tool. Its
+firmware has an **Auto Patch** setting that does the same change by itself each
+time an image is mounted, without touching the file. Use `mdvpatch` when you
+want a patched file to keep, for an emulator or another device.
+
 ## What you need
 
 - A computer with Windows, Linux or macOS.

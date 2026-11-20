@@ -242,6 +242,8 @@ void uiext_vibro_master_set(bool on);
 // + centered caption; without box art, "Mounted" over the name, centered
 // mid-screen. Does not wait for input.
 void uiext_cart_screen(const char *item_name, const char *caption);
+// Same, with an extra line below the name in its own colour (NULL or "" = none).
+void uiext_cart_screen_note(const char *item_name, const char *caption, const char *note);
 
 // ── Status/confirm screen helpers (band-renderer based) ──────────────────────
 void uiext_ota_screen(const char *title, const char *l1, const char *l2, const char *l3);

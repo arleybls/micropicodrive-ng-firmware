@@ -52,8 +52,8 @@ updating the device in the field. What it adds:
   cartridge with unsaved changes asks before ejecting, and saving is blocked if
   the SD card was swapped after the image was loaded.
 - Persistent settings (theme, caption position, path bar, corner marker, the
-  display panel profile, the drive mode pill, and the Motor haptic options)
-  stored in flash.
+  display panel profile, the drive mode pill, auto patch, the last learned
+  drive number, and the Motor haptic options) stored in flash.
 - Two display panel profiles. The 0.96" 80x160 module ships in two variants
   that need different inversion and start offsets, and the display SPI has no
   MISO line, so the controller cannot be identified at runtime. The profile is
@@ -62,9 +62,19 @@ updating the device in the field. What it adds:
   does not require reading the screen it fixes.
 - Drive mode pill. The unit learns which Microdrive it is by counting the clock
   pulses of the QL's select burst (selecting drive n is n pulses, and 8 pulses
-  deselects every drive) and shows the number in the corner of the screen. Until
-  it has seen a QL it shows `B`, for bench. Nothing is configured, and select
-  handling is untouched. It can be hidden in System Tools -> UI Options.
+  deselects every drive) and shows the number in the corner of the screen:
+  amber `B` (bench) until a QL is seen, the number remembered from the last
+  power-on in grey until the QL selects the unit, then the confirmed number in
+  green. A learned number is written to the settings sector once the drive has
+  been idle for two seconds with no image mounted, or at the next eject.
+  Nothing is configured, and select handling is untouched. It can be hidden in
+  System Tools -> UI Options.
+- Auto patch (a System Tools switch, off by default). On mount, every
+  `mdv1_` to `mdv8_` inside the image's files is rewritten in RAM to the unit's
+  own drive number, so software written for drive 1 runs from drive 2. The file
+  on the card is never changed: the original bytes are put back for a save, and
+  a sector the QL has rewritten is no longer touched. The mounted screen says
+  what was done.
 - `tools/mdvpatch.py` rewrites the drive names hardcoded inside an `.MDV` image
   (`mdv1_` to `mdv2_` and back), so software written for drive 1 runs from
   another drive. See [docs/MDVPATCH_MANUAL.md](docs/MDVPATCH_MANUAL.md).

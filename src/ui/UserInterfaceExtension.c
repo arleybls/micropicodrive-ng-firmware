@@ -24,6 +24,7 @@
 #include "sd_thumb.h"
 #include "sys_info.h"
 #include "ql_probe.h"
+#include "autopatch.h"
 // Both boards need this: cfInserted/mdInUse (radio-mode gate on 2 W, BOOTSEL
 // eject gate on Lite), PIN_LED_ACTIVITY for the LED Test entry, and
 // config_save_settings(). Gating it broke the RP2040 build — study trap T3.
@@ -722,24 +723,39 @@ static void do_select_blink(const char *raw_name, int band) {
 // centered as a block in the middle (the caption-position setting does not
 // apply there). Non-blocking (the caller owns the flow; the sandbox's
 // button-wait was removed).
+//
+// `note` is an optional extra line directly below the name, in its own colour
+// (auto-patch uses it for "Patched to mdv2").
+#define UIEXT_COLOR_CART_NOTE 0x0600   // the rainbow's green: reads on both themes
+
+static void cart_text_row(const char *text, uint16_t fg, int row_top) {
+    int x = (UIEXT_DISPLAY_WIDTH - (int)label_pixel_width(text)) / 2;
+    if (x < 0) x = 0;
+    rasterize_row(menu_row_buf, text, fg, UIEXT_COLOR_BG, x);
+    setAddrWindow(0, (uint8_t)row_top, (uint8_t)(UIEXT_DISPLAY_WIDTH - 1),
+                  (uint8_t)(row_top + UIEXT_MENU_CHAR_HEIGHT - 1));
+    tft_dc_high();
+    tft_cs_low();
+    spi_write_blocking(SPI_TFT_PORT, menu_row_buf, sizeof(menu_row_buf));
+    tft_cs_high();
+}
+
 void uiext_cart_screen(const char *item_name, const char *caption) {
+    uiext_cart_screen_note(item_name, caption, NULL);
+}
+
+void uiext_cart_screen_note(const char *item_name, const char *caption, const char *note) {
+    bool has_note = note && note[0];
     fillScreen(UIEXT_COLOR_BG);
 
     if (!sd_thumb_show(item_name)) {
-        const char *lines[2] = { "Mounted", (caption && caption[0]) ? caption : "" };
-        int top = (UIEXT_DISPLAY_HEIGHT - 2 * UIEXT_MENU_CHAR_HEIGHT) / 2;
-        for (int i = 0; i < 2; i++) {
-            int x = (UIEXT_DISPLAY_WIDTH - (int)label_pixel_width(lines[i])) / 2;
-            if (x < 0) x = 0;
-            rasterize_row(menu_row_buf, lines[i], UIEXT_COLOR_TEXT, UIEXT_COLOR_BG, x);
-            uint8_t y = (uint8_t)(top + i * UIEXT_MENU_CHAR_HEIGHT);
-            setAddrWindow(0, y, (uint8_t)(UIEXT_DISPLAY_WIDTH - 1),
-                          (uint8_t)(y + UIEXT_MENU_CHAR_HEIGHT - 1));
-            tft_dc_high();
-            tft_cs_low();
-            spi_write_blocking(SPI_TFT_PORT, menu_row_buf, sizeof(menu_row_buf));
-            tft_cs_high();
-        }
+        int nlines = has_note ? 3 : 2;
+        int top = (UIEXT_DISPLAY_HEIGHT - nlines * UIEXT_MENU_CHAR_HEIGHT) / 2;
+        cart_text_row("Mounted", UIEXT_COLOR_TEXT, top);
+        cart_text_row((caption && caption[0]) ? caption : "", UIEXT_COLOR_TEXT,
+                      top + UIEXT_MENU_CHAR_HEIGHT);
+        if (has_note)
+            cart_text_row(note, UIEXT_COLOR_CART_NOTE, top + 2 * UIEXT_MENU_CHAR_HEIGHT);
         uiext_pill_draw();
         return;
     }
@@ -747,10 +763,6 @@ void uiext_cart_screen(const char *item_name, const char *caption) {
     if (!caption || !caption[0]) { uiext_pill_draw(); return; }
 
     // Horizontally centred caption (baseline y depends on caption position)
-    int text_w = (int)label_pixel_width(caption);
-    int text_x = (UIEXT_DISPLAY_WIDTH - text_w) / 2;
-    if (text_x < 0) text_x = 0;
-
     int text_y;  // baseline position
     switch (g_caption_pos) {
         case CAPTION_TOP:    text_y = UIEXT_MENU_BASELINE_OFFSET; break;
@@ -761,18 +773,15 @@ void uiext_cart_screen(const char *item_name, const char *caption) {
     // AA rasterizer — library drawChar reads 1-bit bitmaps; ours are 2-bit.
     int row_top = text_y - (int)UIEXT_MENU_BASELINE_OFFSET;
     if (row_top < 0) row_top = 0;
-    if (row_top + (int)UIEXT_MENU_CHAR_HEIGHT > (int)UIEXT_DISPLAY_HEIGHT)
-        row_top = (int)UIEXT_DISPLAY_HEIGHT - (int)UIEXT_MENU_CHAR_HEIGHT;
+    // The note goes below the name, so a bottom caption moves up one row.
+    int rows = has_note ? 2 : 1;
+    if (row_top + rows * (int)UIEXT_MENU_CHAR_HEIGHT > (int)UIEXT_DISPLAY_HEIGHT)
+        row_top = (int)UIEXT_DISPLAY_HEIGHT - rows * (int)UIEXT_MENU_CHAR_HEIGHT;
     // Theme text color, not hardcoded white — white on the light theme's
     // white band made the caption invisible.
-    rasterize_row(menu_row_buf, caption, UIEXT_COLOR_TEXT, UIEXT_COLOR_BG, text_x);
-    setAddrWindow(0, (uint8_t)row_top,
-                  (uint8_t)(UIEXT_DISPLAY_WIDTH - 1),
-                  (uint8_t)(row_top + UIEXT_MENU_CHAR_HEIGHT - 1));
-    tft_dc_high();
-    tft_cs_low();
-    spi_write_blocking(SPI_TFT_PORT, menu_row_buf, sizeof(menu_row_buf));
-    tft_cs_high();
+    cart_text_row(caption, UIEXT_COLOR_TEXT, row_top);
+    if (has_note)
+        cart_text_row(note, UIEXT_COLOR_CART_NOTE, row_top + UIEXT_MENU_CHAR_HEIGHT);
     uiext_pill_draw();   // after the caption: a top caption shares these rows
 }
 
@@ -788,9 +797,9 @@ enum { CFG_CAPTION, CFG_THEME, CFG_PATHBAR, CFG_RAINBOW, CFG_CONNECT, CFG_OTA, C
        CFG_SEP_MOTOR,  // ditto for the haptic-event toggles
        CFG_VIB_MASTER, CFG_VIB_CART, CFG_VIB_XFER, CFG_VIB_ALERT, CFG_VIB_LP,
        CFG_VIB_SDOP, CFG_PANEL,
-       CFG_PILL,
+       CFG_PILL, CFG_AUTOPATCH,
        CFG_QLPROBE };  // diagnostic build only (MPD_QL_PROBE)
-#define CFG_MAX_ITEMS 25
+#define CFG_MAX_ITEMS 26
 
 static bool cfg_is_sep(int id) { return id == CFG_SEP_UI || id == CFG_SEP_MOTOR; }
 #define UIEXT_SEP_RULE_COLOR 0xF7BE   // whitesmoke (RGB 245,245,245), both themes
@@ -1448,6 +1457,7 @@ static bool run_config_menu(void) {
         ids[count++] = CFG_QLPROBE;
 #endif
         ids[count++] = CFG_LEDTEST;
+        ids[count++] = CFG_AUTOPATCH;   // drive behaviour, not a display option
         ids[count++] = CFG_SEP_UI;   // UI options grouped below the separator
         ids[count++] = CFG_CAPTION;
         ids[count++] = CFG_THEME;
@@ -1503,6 +1513,10 @@ static bool run_config_menu(void) {
                     case CFG_PILL:
                         snprintf(label, sizeof(label), "Drive Mode Pill: %s",
                                  ql_probe_pill_enabled() ? "On" : "Off");
+                        break;
+                    case CFG_AUTOPATCH:
+                        snprintf(label, sizeof(label), "Auto Patch: %s",
+                                 autopatch_enabled() ? "On" : "Off");
                         break;
                     case CFG_CONNECT: snprintf(label, sizeof(label), "Connect");     break;
                     case CFG_OTA:     snprintf(label, sizeof(label), "Update Firmware"); break;
@@ -1608,6 +1622,11 @@ static bool run_config_menu(void) {
                         break;
                     case CFG_PILL:
                         ql_probe_pill_enable(!ql_probe_pill_enabled());
+                        opts_dirty = true;
+                        break;
+                    case CFG_AUTOPATCH:
+                        // Takes effect at the next mount.
+                        autopatch_enable(!autopatch_enabled());
                         opts_dirty = true;
                         break;
                     case CFG_PANEL:
@@ -1912,6 +1931,10 @@ int uiext_menu_run(char **items, int count, int *offset) {
 
     while (true) {
         ql_probe_pill();   // drive mode pill: appears here when the number is learned
+        // Remember a newly learned drive number across power-offs. Done here,
+        // in the browser, because flash writes need the image ejected.
+        if (cfInserted == NONE && ql_probe_drive_needs_save())
+            config_save_settings();
         {   // card still there?
             uint32_t now_ms = to_ms_since_boot(get_absolute_time());
             if (now_ms >= next_sd_poll_ms) {

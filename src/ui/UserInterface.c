@@ -14,6 +14,7 @@
 #include "sd_menu.h"
 #include "UserInterfaceExtension.h"
 #include "ql_probe.h"
+#include "autopatch.h"
 #include "sd_update.h"          //both boards (trap T2) — CMake picks the flavour
 #if UIEXT_SETTINGS_PERSIST
 #include "pico/flash.h"          //flash_safe_execute (settings sector)
@@ -113,6 +114,7 @@ static bool read_config_file(void);
 static bool try_config_autoload(void);
 static bool write_config_tag(const char *full_path);
 static void show_cart_ready(void);
+static void apply_autopatch(void);
 
 //Shared FatFs mount (sandbox sd_fs_mount API â€” sd_check calls it too).
 //Always forces a fresh mount AND a full low-level card re-init: the forced
@@ -636,6 +638,11 @@ void process_md_read(uint8_t bufferSet)
 void process_md_write(uint8_t bufferSet)
 {
     cartDirty = true; //RAM image now differs from the file on SD
+
+    //The sector about to be overwritten is the QL's from now on: auto-patch
+    //must not put an "original" byte back into it at save time.
+    autopatch_sector_written(bufferSet == 0 ? bufferset_1_sector_number
+                                            : bufferset_2_sector_number);
 
     read_buffer_set(bufferSet);
 
@@ -1584,6 +1591,7 @@ void process_user_interface()
                 {
                     ui_status("Validating");
 
+                    apply_autopatch();
                     fix_cartridge_checksums();
 
                     write_buffer_set(0, 0);
@@ -1636,6 +1644,11 @@ void process_user_interface()
                         removeEvt.event = UTM_CARTRIDGE_REMOVED;
                         clear_event_overflows();
                         event_push(&uiToMdEventQueue, &removeEvt);
+                        //A drive number learned this session is remembered
+                        //for auto-patch at the next mount. Saved here because
+                        //flash writes need the cartridge ejected.
+                        if(ql_probe_drive() != ql_probe_drive_saved())
+                            config_save_settings();
                     }
                 }
                 else if(BUTTON_PRESSED(PIN_BTN_SELECT))
@@ -1670,6 +1683,9 @@ void process_user_interface()
 
                     bool res = false;
 
+                    //The file on the card keeps the image's own drive
+                    //names: auto-patch steps out for the save and back in.
+                    autopatch_undo();
                     uiext_vibro_run_begin();
                     switch(cfInserted)
                     {
@@ -1681,6 +1697,7 @@ void process_user_interface()
                             break;
                     }
                     uiext_vibro_run_end();
+                    autopatch_redo();
 
                     LED_OFF(PIN_LED_ACTIVITY);
                     //Removal mid-save lands here as a failed save: the RAM
@@ -1794,7 +1811,19 @@ static void show_cart_ready(void) {
     if (dot) *dot = '\0';
     char label[UIEXT_MENU_ITEM_MAX_CHARS + 3];
     uiext_pixel_clip(label, base, UIEXT_DISPLAY_WIDTH);
-    uiext_cart_screen(selected_name, label);
+    //Auto-patch changed names in this image: say so under its name.
+    char note[20] = "";
+    if(autopatch_count() > 0)
+        snprintf(note, sizeof(note), "Patched to mdv%c", autopatch_drive_char());
+    uiext_cart_screen_note(selected_name, label, note);
+}
+
+//Auto-patch a freshly loaded image, with a status line while it runs.
+static void apply_autopatch(void) {
+    if(!autopatch_enabled() || !ql_probe_drive())
+        return;
+    ui_status("Patching");
+    autopatch_apply();
 }
 
 // Reads CONFIG.CFG from SD root, populates configTaggedPath with the FILE= value.
@@ -1878,6 +1907,7 @@ static bool try_config_autoload(void) {
         return false;
     }
 
+    apply_autopatch();
     fix_cartridge_checksums();
     write_buffer_set(0, 0);
     write_buffer_set(1, 1);
@@ -1984,6 +2014,12 @@ typedef struct {
     uint8_t  panel;
     //Drive mode pill on/off. A pre-feature record's 0xFF loads as "on".
     uint8_t  drive_pill;
+    //Auto-patch on/off; only an explicit 1 is "on", so a pre-feature record's
+    //0xFF keeps it off.
+    uint8_t  autopatch;
+    //Last drive number learned from the QL (1-8), for auto-patch at mount
+    //time before the QL has confirmed it again. Anything else = not known.
+    uint8_t  drive_no;
 } settings_rec_t;
 
 static void settings_flash_write_cb(void *param)
@@ -2019,6 +2055,8 @@ void config_save_settings(void)
         .vibro_master = uiext_vibro_master_get() ? 1 : 0,
         .panel        = (uint8_t)uiext_panel_get(),
         .drive_pill   = ql_probe_pill_enabled() ? 1 : 0,
+        .autopatch    = autopatch_enabled() ? 1 : 0,
+        .drive_no     = ql_probe_drive(),
     };
     memcpy(page, &rec, sizeof(rec));
 
@@ -2027,6 +2065,8 @@ void config_save_settings(void)
         ui_error("Save failed");
         sleep_ms(2000);
     }
+    else
+        ql_probe_drive_set_saved(rec.drive_no);
 #endif
 }
 
@@ -2057,6 +2097,8 @@ static void config_load_settings(void)
     //with no record at all returns above and keeps that Type 2 default.
     uiext_panel_set(rec->panel == 0xFF ? UIEXT_PANEL_TYPE1 : rec->panel);
     ql_probe_pill_enable(rec->drive_pill != 0);
+    autopatch_enable(rec->autopatch == 1);
+    ql_probe_drive_set_saved(rec->drive_no);   //out-of-range (0xFF) = not known
 #endif
 }
 

@@ -120,6 +120,9 @@ endif()
 # counts with a state machine on pio2; the Pico has no room left in its two PIO
 # blocks and counts with a PWM slice instead.
 list(APPEND MPD_SOURCES src/ui/ql_probe.c)
+# Auto-patch: rewrites the drive names inside a mounted image, in RAM, to the
+# drive number learned above. Off unless enabled in System Tools.
+list(APPEND MPD_SOURCES src/ui/autopatch.c)
 # Diagnostic, off by default: a System Tools page with the raw burst counts.
 option(MPD_QL_PROBE "Add the QL select-clock probe page" OFF)
 if(MPD_QL_PROBE)
