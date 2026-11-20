@@ -71,6 +71,9 @@ updating the device in the field. What it adds:
   on the card is never changed: the original bytes are put back for a save, and
   a sector the QL has rewritten is no longer touched. The mounted screen says
   what was done.
+
+  ![The same image mounted in both drives with auto patch on: drive 1 patched it to mdv1, drive 2 needed no change](docs/images/autopatch.jpg)
+
 - `tools/mdvpatch.py` rewrites the drive names hardcoded inside an `.MDV` image
   (`mdv1_` to `mdv2_` and back), so software written for drive 1 runs from
   another drive. See [docs/MDVPATCH_MANUAL.md](docs/MDVPATCH_MANUAL.md).

@@ -119,7 +119,8 @@ def render_markdown(source):
                 list_type = kind
             paragraph = [item[3]]
             index += 1
-            while index < len(lines) and lines[index].startswith("   ") and lines[index].strip() and not lines[index].strip().startswith(("```", "|")):
+            # Two spaces, not three: a wrapped "- " bullet continues at column 2.
+            while index < len(lines) and lines[index].startswith("  ") and lines[index].strip() and not lines[index].strip().startswith(("```", "|")):
                 paragraph.append(lines[index].strip())
                 index += 1
             output.append("<li>" + inline(" ".join(paragraph)) + "</li>")
@@ -155,13 +156,17 @@ figcaption { font-size: 8pt; color: #52616b; margin-top: 4pt; }
 
 
 def main():
-    story = pymupdf.Story(render_markdown(SOURCE.read_text(encoding="utf-8")), user_css=CSS)
+    text = SOURCE.read_text(encoding="utf-8")
+    # The footer carries the version the manual says it matches.
+    version = re.search(r"firmware\s+version\s+(\d+\.\d+\.\d+)", text)
+    footer = "MicroPicoDrive NG | Firmware manual" + (f" | v{version[1]}" if version else "")
+    story = pymupdf.Story(render_markdown(text), user_css=CSS)
     paper = pymupdf.paper_rect("a4")
     area = pymupdf.Rect(44, 44, paper.width - 44, paper.height - 46)
     document = story.write_with_links(lambda *_: (paper, area, None))
     for number, page in enumerate(document, 1):
         page.draw_line((44, paper.height - 34), (paper.width - 44, paper.height - 34), color=(0.7, 0.76, 0.8), width=0.5)
-        page.insert_text((44, paper.height - 22), "MicroPicoDrive NG | Firmware manual | v2.10.1", fontsize=8, color=(0.35, 0.4, 0.45))
+        page.insert_text((44, paper.height - 22), footer, fontsize=8, color=(0.35, 0.4, 0.45))
         page.insert_text((paper.width - 75, paper.height - 22), f"{number} / {len(document)}", fontsize=8)
     document.set_metadata({"title": "MicroPicoDrive NG firmware manual", "subject": "SD cards, everyday use and System Tools", "author": "MicroPicoDrive NG project"})
     document.save(DESTINATION, garbage=4, deflate=True)

@@ -11,6 +11,7 @@ docs/*
 !docs/MDVPATCH_MANUAL.md
 !docs/images/
 !docs/images/rainbow.png
+!docs/images/autopatch.jpg
 
 # Build artefacts. Releases are published via GitHub Releases, not committed.
 dist/

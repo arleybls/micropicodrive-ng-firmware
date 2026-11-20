@@ -286,6 +286,14 @@ finds in the image's files is changed to this drive's own number.
 - Start the program with the name of the drive it is in, for example
   `LRUN mdv2_boot`. The QL only starts a cartridge by itself from drive 1.
 
+![The same image, Bruce_Lee_mdv2, mounted in both drives of one QL with Auto Patch on. Left: drive 1 changed the names and says so. Right: drive 2 needed no change, so there is no extra line.](images/autopatch.jpg)
+
+The picture shows one file mounted in two drives at once. The file was made for
+drive 2. The drive in position 1 (green box showing `1`) changed its names and
+shows **Patched to mdv1**. The drive in position 2 (green box showing `2`) found
+the names already right and changed nothing. The file on the card is the same
+in both cases.
+
 Leave it off for software that really uses two drives, such as a copy program
 that reads `mdv1_` and writes `mdv2_`: with Auto Patch on, both names become
 this drive. It also cannot help a program that builds the drive name while it
