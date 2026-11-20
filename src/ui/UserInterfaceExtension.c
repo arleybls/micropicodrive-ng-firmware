@@ -23,6 +23,9 @@
 #include "sd_menu.h"
 #include "sd_thumb.h"
 #include "sys_info.h"
+#if MPD_QL_PROBE
+#include "ql_probe.h"
+#endif
 // Both boards need this: cfInserted/mdInUse (radio-mode gate on 2 W, BOOTSEL
 // eject gate on Lite), PIN_LED_ACTIVITY for the LED Test entry, and
 // config_save_settings(). Gating it broke the RP2040 build — study trap T3.
@@ -409,6 +412,24 @@ static void rasterize_row(uint8_t *buf, const char *label,
     }
 }
 
+#if MPD_QL_PROBE
+// Diagnostic build: one-character pill stamped over the top-right corner.
+void uiext_probe_pill(char c, uint16_t bg) {
+    const char s[2] = { c, '\0' };
+    const int top = 3, rows = 15;     // slice of the text row holding the glyph
+    int w = (int)label_pixel_width(s) + 8;
+    rasterize_row(menu_row_buf, s, ST7735_BLACK, bg, 4);
+    setAddrWindow((uint8_t)(UIEXT_DISPLAY_WIDTH - w - 1), 1,
+                  (uint8_t)(UIEXT_DISPLAY_WIDTH - 2), (uint8_t)rows);
+    tft_dc_high();
+    tft_cs_low();
+    for (int y = top; y < top + rows; y++)
+        spi_write_blocking(SPI_TFT_PORT, menu_row_buf + y * UIEXT_DISPLAY_WIDTH * 2,
+                           (size_t)w * 2);
+    tft_cs_high();
+}
+#endif
+
 // ── CONFIG.CFG tag bar ────────────────────────────────────────────────────────
 // Red bar in the left gutter marking the auto-load-tagged item. The '*'
 // label prefix stays as the data marker but is stripped before rasterising;
@@ -725,8 +746,9 @@ enum { CFG_CAPTION, CFG_THEME, CFG_PATHBAR, CFG_RAINBOW, CFG_CONNECT, CFG_OTA, C
        CFG_SEP_UI,     // non-selectable "UI" group separator (dotted rules)
        CFG_SEP_MOTOR,  // ditto for the haptic-event toggles
        CFG_VIB_MASTER, CFG_VIB_CART, CFG_VIB_XFER, CFG_VIB_ALERT, CFG_VIB_LP,
-       CFG_VIB_SDOP, CFG_PANEL };
-#define CFG_MAX_ITEMS 23
+       CFG_VIB_SDOP, CFG_PANEL,
+       CFG_QLPROBE, CFG_PILL };  // diagnostic build only (MPD_QL_PROBE)
+#define CFG_MAX_ITEMS 25
 
 static bool cfg_is_sep(int id) { return id == CFG_SEP_UI || id == CFG_SEP_MOTOR; }
 #define UIEXT_SEP_RULE_COLOR 0xF7BE   // whitesmoke (RGB 245,245,245), both themes
@@ -1380,6 +1402,9 @@ static bool run_config_menu(void) {
 #endif
         if (sd_present) ids[count++] = CFG_SDCHECK;
         ids[count++] = CFG_SYSINFO;
+#if MPD_QL_PROBE
+        ids[count++] = CFG_QLPROBE;
+#endif
         ids[count++] = CFG_LEDTEST;
         ids[count++] = CFG_SEP_UI;   // UI options grouped below the separator
         ids[count++] = CFG_CAPTION;
@@ -1387,6 +1412,9 @@ static bool run_config_menu(void) {
         ids[count++] = CFG_PATHBAR;
         ids[count++] = CFG_RAINBOW;
         ids[count++] = CFG_PANEL;
+#if MPD_QL_PROBE
+        ids[count++] = CFG_PILL;
+#endif
 #if UIEXT_VIBRO_ENABLED
         ids[count++] = CFG_SEP_MOTOR;   // haptic-event toggles
         ids[count++] = CFG_VIB_MASTER;
@@ -1432,6 +1460,12 @@ static bool run_config_menu(void) {
                         snprintf(label, sizeof(label), "Panel: %s",
                                  panel_labels[uiext_panel_get()]);
                         break;
+#if MPD_QL_PROBE
+                    case CFG_PILL:
+                        snprintf(label, sizeof(label), "Drive Mode Pill: %s",
+                                 ql_probe_pill_enabled() ? "On" : "Off");
+                        break;
+#endif
                     case CFG_CONNECT: snprintf(label, sizeof(label), "Connect");     break;
                     case CFG_OTA:     snprintf(label, sizeof(label), "Update Firmware"); break;
                     case CFG_PAIR:    snprintf(label, sizeof(label), "Pair Device"); break;
@@ -1439,6 +1473,7 @@ static bool run_config_menu(void) {
                     case CFG_REVERT:  snprintf(label, sizeof(label), "Revert Firmware"); break;
                     case CFG_SDCHECK: snprintf(label, sizeof(label), "SD Check");    break;
                     case CFG_SYSINFO: snprintf(label, sizeof(label), "System Info"); break;
+                    case CFG_QLPROBE: snprintf(label, sizeof(label), "QL Probe");    break;
                     case CFG_LEDTEST: snprintf(label, sizeof(label), "LED & Motor Test"); break;
 #if !UIEXT_OTA_ENABLED
                     case CFG_BOOTSEL: snprintf(label, sizeof(label), "BOOTSEL Mode"); break;
@@ -1533,6 +1568,12 @@ static bool run_config_menu(void) {
                         s_rainbow_pos = (rainbow_pos_t)((s_rainbow_pos + 1) % (RB_OFF + 1));
                         opts_dirty = true;
                         break;
+#if MPD_QL_PROBE
+                    case CFG_PILL:
+                        // Not saved: test-build switch, back On at power-up.
+                        ql_probe_pill_enable(!ql_probe_pill_enabled());
+                        break;
+#endif
                     case CFG_PANEL:
                         // The profile is latched at panel init, so re-run the
                         // whole display bring-up; the menu redraws on the next
@@ -1593,6 +1634,11 @@ static bool run_config_menu(void) {
                     case CFG_SYSINFO:
                         sys_info_run();
                         break;
+#if MPD_QL_PROBE
+                    case CFG_QLPROBE:
+                        ql_probe_run();
+                        break;
+#endif
 #if !UIEXT_OTA_ENABLED
                     case CFG_BOOTSEL:
                         // Hard rule: reset_usb_boot kills the firmware with
@@ -1821,6 +1867,9 @@ int uiext_menu_run(char **items, int count, int *offset) {
 #endif
 
     while (true) {
+#if MPD_QL_PROBE
+        ql_probe_pill();
+#endif
         {   // card still there?
             uint32_t now_ms = to_ms_since_boot(get_absolute_time());
             if (now_ms >= next_sd_poll_ms) {

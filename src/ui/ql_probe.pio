@@ -1,0 +1,25 @@
+; QL select-clock burst counter (bench/diagnostic build only, MPD_QL_PROBE).
+;
+; Watches the Microdrive select clock and reports how many pulses each burst
+; carried. A burst ends when the clock has stayed low for the idle timeout
+; preloaded in OSR (loop iterations, two state-machine cycles each).
+; Read-only: this machine drives no pin and shares none of the drive's state.
+;
+; in base pin = jmp pin = the select clock
+
+.program ql_burst
+
+.wrap_target
+    mov x, ~null            ; pulse counter, counts down from 0xFFFFFFFF
+    wait 1 pin 0            ; first rising edge of a burst
+count:
+    jmp x-- low             ; one more pulse (the jump is always taken)
+low:
+    wait 0 pin 0            ; falling edge
+    mov y, osr              ; reload the idle timeout
+idle:
+    jmp pin count           ; clock rose again: same burst
+    jmp y-- idle
+    mov isr, ~x             ; timeout: report the pulses in this burst
+    push noblock
+.wrap

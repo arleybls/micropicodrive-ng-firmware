@@ -13,7 +13,10 @@
 #include "hw_config.h"  //sd_get_by_num
 #include "sd_menu.h"
 #include "UserInterfaceExtension.h"
-#include "sd_update.h"           //both boards (trap T2) — CMake picks the flavour
+#if MPD_QL_PROBE
+#include "ql_probe.h"
+#endif
+#include "sd_update.h"          //both boards (trap T2) — CMake picks the flavour
 #if UIEXT_SETTINGS_PERSIST
 #include "pico/flash.h"          //flash_safe_execute (settings sector)
 #include "hardware/flash.h"
@@ -2065,6 +2068,9 @@ void RunUserInterface()
 
     init_buttons();     //buttons + PIN_UI_DETECT pull-up, before the IRQ arms
     cart_hotplug_init(); //tri-state cartridge pins (LED included), arm detect IRQ
+#if MPD_QL_PROBE
+    ql_probe_init();
+#endif
 
     while(true)
     {
@@ -2095,6 +2101,11 @@ void RunUserInterface()
         }
 
         led_task();
+#if MPD_QL_PROBE
+        ql_probe_task();
+        if(cartPresent && uiState != IDLE && uiState != DELAY && uiState != INIT_SCREEN)
+            ql_probe_pill();
+#endif
 
         //While the QL is actively using the drive the UI is frozen: buttons
         //are ignored — including eject, which used to fire here instantly

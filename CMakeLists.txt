@@ -115,7 +115,21 @@ else()
     # rather than a silently missing feature. See sd_update.h.
     list(APPEND MPD_SOURCES src/update/sd_update_lite.c)
 endif()
+# Diagnostic build, off by default: counts the clock pulses in each QL select
+# burst and shows them on a System Tools page (src/ui/ql_probe.c). Observes
+# only. The Pico 2 W counts with a state machine on pio2; the Pico has no room
+# left in its two PIO blocks and counts with a PWM slice instead.
+option(MPD_QL_PROBE "Add the QL select-clock probe page" OFF)
+if(MPD_QL_PROBE)
+    list(APPEND MPD_SOURCES src/ui/ql_probe.c)
+    set(MPD_QL_PROBE_DEF 1)
+else()
+    set(MPD_QL_PROBE_DEF 0)
+endif()
 add_executable(MicroPicoDrive ${MPD_SOURCES})
+if(MPD_QL_PROBE AND PICO_BOARD STREQUAL "pico2_w")
+    pico_generate_pio_header(MicroPicoDrive ${CMAKE_CURRENT_LIST_DIR}/src/ui/ql_probe.pio)
+endif()
 
 # Firmware identity: MicroPicoDrive starts at v2.0 with the new UI stack.
 # Three-part versions since v2.5.1; the A/B seal and the BLE wire carry only
@@ -132,7 +146,8 @@ target_compile_definitions(MicroPicoDrive PRIVATE
         UIEXT_FW_VERSION_PATCH=${MPD_FW_VERSION_PATCH}
         UIEXT_OTA_ENABLED=${UIEXT_OTA_ENABLED}
         UIEXT_VSCROLL_ANIM_ENABLED=${UIEXT_VSCROLL_ANIM_ENABLED}
-        UIEXT_SETTINGS_PERSIST=${UIEXT_SETTINGS_PERSIST})
+        UIEXT_SETTINGS_PERSIST=${UIEXT_SETTINGS_PERSIST}
+        MPD_QL_PROBE=${MPD_QL_PROBE_DEF})
 
 # Create C header file with the name <pio program>.pio.h
 pico_generate_pio_header(${PROJECT_NAME}  
