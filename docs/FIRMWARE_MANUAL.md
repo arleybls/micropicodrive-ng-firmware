@@ -4,7 +4,7 @@
 
 This manual shows you how to prepare a microSD card, work with cartridge
 images on the Sinclair QL, and set everything up in System Tools. It matches
-firmware version 2.10.1.
+firmware version 2.12.0.
 
 Fitting the board inside the QL — including the Pico and the optional
 vibration motor — is covered by the hardware installation manual in the
@@ -330,24 +330,37 @@ way the QL addresses it, and shows the number in a small box at the top-right
 of the file browser and the mounted-cartridge screen: `1` for `mdv1_`, `2` for
 `mdv2_`. You do not set this anywhere.
 
-The box changes as the drive learns where it is:
+The box always shows one of four things. Colour tells you how sure the drive
+is, and the character tells you what it knows:
 
-| Box | Meaning |
-|---|---|
-| Amber `B` | Bench: the drive has not seen a QL since power-on. It stays like this on a drive powered outside a QL |
-| Grey number | The QL is there, but has not used this drive yet. The number is the one remembered from last time |
-| Grey `?` | The same, on a drive that has no number remembered yet |
-| Green number | Confirmed: the QL has used this drive since power-on |
-
-Any access confirms the number, even a `DIR` with no image mounted. The drive
-then stores it in its own memory, a couple of seconds after the QL has finished
-and while no image is mounted, or when you next eject an image. After that it
-survives power-offs and firmware updates. A drive moved to the other position
-shows its old number in grey at first, and corrects itself the first time the
-QL uses it there.
+| Box | What it means | What to do |
+|---|---|---|
+| Amber `B` | **Bench.** The drive has not seen a QL since it was powered on. It stays like this on a drive powered outside a QL | Nothing on the bench. Inside a QL, use any drive once |
+| Grey `?` | **QL found, number unknown.** The QL is there but has not used this drive yet, and the drive has no number remembered from before. You see this on a new drive, or right after its first firmware with this feature | Type `DIR` for this drive's position |
+| Grey number | **Remembered, not confirmed.** The QL is there but has not used this drive since power-on. The number is the one stored from the last time it was used | Nothing. It turns green on the first access |
+| Green number | **Confirmed.** The QL has used this drive since power-on, and this is the position it was addressed at | Nothing |
 
 After a power-on inside a QL you will normally see `B` for a moment, then the
 grey number as soon as the QL uses any drive, then green once it uses this one.
+Any access confirms the number, even a `DIR` with no image mounted.
+
+**How the number is remembered.** The drive stores its number in the Pico's
+own flash memory, in the same place as the display and motor settings. It is
+not written to the SD card, so it stays with the mainboard when you change
+cards or cartridge boards.
+
+- **When it is written.** Only when the QL has confirmed a number that differs
+  from the stored one. The write happens about two seconds after the QL has
+  finished using the drive, while no image is mounted. If an image is mounted
+  at that moment, it happens when you next eject it. An unchanged number is
+  never written again, so normal use does not wear the flash.
+- **What it survives.** Power-off, resets and firmware updates.
+- **If the drive is moved.** A drive moved to the other position first shows
+  its old number in grey. The first time the QL uses it there, the number turns
+  green with the new value and the stored number is replaced. You never have to
+  clear it by hand.
+- **Who uses it.** The grey box, and Auto Patch, which needs the number at the
+  moment an image is mounted, often before the QL has used the drive.
 
 ### Motor
 

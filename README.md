@@ -62,13 +62,9 @@ updating the device in the field. What it adds:
   does not require reading the screen it fixes.
 - Drive mode pill. The unit learns which Microdrive it is by counting the clock
   pulses of the QL's select burst (selecting drive n is n pulses, and 8 pulses
-  deselects every drive) and shows the number in the corner of the screen:
-  amber `B` (bench) until a QL is seen, the number remembered from the last
-  power-on in grey until the QL selects the unit, then the confirmed number in
-  green. A learned number is written to the settings sector once the drive has
-  been idle for two seconds with no image mounted, or at the next eject.
-  Nothing is configured, and select handling is untouched. It can be hidden in
-  System Tools -> UI Options.
+  deselects every drive) and shows it in the corner of the screen. Nothing is
+  configured, and select handling is untouched. It can be hidden in
+  System Tools -> UI Options. See [Drive mode pill](#drive-mode-pill).
 - Auto patch (a System Tools switch, off by default). On mount, every
   `mdv1_` to `mdv8_` inside the image's files is rewritten in RAM to the unit's
   own drive number, so software written for drive 1 runs from drive 2. The file
@@ -160,6 +156,39 @@ one toggle per cue (cartridge, transfer, alerts, long press), and the
 load/save motor run with a selectable spin-down tail (off, 250 ms, 500 ms
 or 1 s). Its UI Options section carries the display panel profile and the drive
 mode pill switch alongside the theme, caption, path bar and corner marker.
+
+## Drive mode pill
+
+A one-character box at the top-right of the browser and the mounted-cartridge
+screen. Colour says how sure the unit is, the character what it knows:
+
+| Pill | State | Shown when |
+|---|---|---|
+| Amber `B` | Bench | No deselect burst and no select has been seen since power-on, so no QL has been detected |
+| Grey `?` | QL found, number unknown | A QL has been seen, this unit has not been selected yet, and no number is stored in flash |
+| Grey digit | Remembered, not confirmed | A QL has been seen, this unit has not been selected yet, and the digit is the stored number |
+| Green digit | Confirmed | The QL has selected this unit since power-on; the digit is the pulse count of that select burst |
+
+How it works: the QL selects drive n with a burst of n clock pulses and
+deselects all drives with a burst of 8. The firmware counts the pulses of every
+burst (a state machine on `pio2` on the Pico 2 W; PWM slice 0 as an edge counter
+on the Pico, whose two PIO blocks are full). The burst that leaves the unit
+selected gives its position in the chain. Left on the bench for over ten
+minutes, line noise never produced a clean 8-pulse burst, which is what makes
+`B` a usable bench indicator.
+
+Persistence: the confirmed number is stored in the settings record in flash
+(`drive_no` in `settings_rec_t`, data partition at 0x344000 on the Pico 2 W,
+last flash sector on the Pico). It is written only when it differs from the
+stored value, once the drive has been deselected for two seconds with no image
+mounted, or at the next eject, because flash writes stall both cores and are
+never made while an image is mounted. It survives power-off and firmware
+updates. A unit moved to another position shows the old number in grey until
+the QL selects it there; the new number then replaces the stored one. Auto patch
+reads the same number at mount time.
+
+Nothing is drawn while the drive is selected, so the pill never causes display
+traffic during a QL access.
 
 ## Hot-swap handling
 
