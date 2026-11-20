@@ -17,11 +17,19 @@
 # only carry major/minor u16, so ordering there uses minor*100+patch
 # (patch 0-99); displays and filenames use the full M.m.p.
 param(
-    [int]$Major = 2,
-    [int]$Minor = 10,
-    [int]$Patch = 0
+    [int]$Major = -1,          # default: the version set in CMakeLists.txt
+    [int]$Minor = -1,
+    [int]$Patch = -1
 )
-if ($Patch -lt 0 -or $Patch -gt 98) { throw "Patch must be 0-98 (99 is reserved for the auto OTA-test build)" }
+function CMakeVersion([string]$part) {
+    $m = [regex]::Match((Get-Content "$PSScriptRoot\..\CMakeLists.txt" -Raw), "set\(MPD_FW_VERSION_$part (\d+)")
+    if (-not $m.Success) { throw "MPD_FW_VERSION_$part not found in CMakeLists.txt" }
+    [int]$m.Groups[1].Value
+}
+if ($Major -lt 0) { $Major = CMakeVersion MAJOR }
+if ($Minor -lt 0) { $Minor = CMakeVersion MINOR }
+if ($Patch -lt 0) { $Patch = CMakeVersion PATCH }
+if ($Patch -gt 98) { throw "Patch must be 0-98 (99 is reserved for the auto OTA-test build)" }
 $ErrorActionPreference = "Stop"
 $root = Split-Path $PSScriptRoot -Parent
 $sdk  = "$env:USERPROFILE\.pico-sdk"

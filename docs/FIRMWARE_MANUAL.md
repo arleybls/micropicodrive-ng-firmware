@@ -411,6 +411,7 @@ hardware's USB power arrangement before servicing an installed mainboard.
 | Bad format | Check image format and exact file size; recover a clean copy if necessary |
 | Load failed | Check the original filename/path and card readability; a truncated long name can cause this |
 | QL cannot read the image | Wait for mounting, use the correct `mdv` number and try a known-good image; inspect wiring only with power disconnected |
+| `bad or changed medium` on a QL with an accelerator card | The QL times its Microdrive reads in software, so a faster processor can upset them. Slow the card down, or switch it to its standard-speed mode, while using the drive |
 | Buttons do not respond | Wait for QL drive activity to finish; normal cartridge controls are gated while selected |
 | Eject first | Save with K3, eject with K1/K2, then open Tools |
 | Different card / Save blocked | Reinsert the original card and retry K3 without ejecting the image |

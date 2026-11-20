@@ -16,14 +16,22 @@
 #
 # Usage:  powershell -File tools\build_lite.ps1 [-Major 2] [-Minor 7] [-Patch 0]
 param(
-    [int]$Major = 2,
-    [int]$Minor = 10,
-    [int]$Patch = 0
+    [int]$Major = -1,          # default: the version set in CMakeLists.txt
+    [int]$Minor = -1,
+    [int]$Patch = -1
 )
+function CMakeVersion([string]$part) {
+    $m = [regex]::Match((Get-Content "$PSScriptRoot\..\CMakeLists.txt" -Raw), "set\(MPD_FW_VERSION_$part (\d+)")
+    if (-not $m.Success) { throw "MPD_FW_VERSION_$part not found in CMakeLists.txt" }
+    [int]$m.Groups[1].Value
+}
+if ($Major -lt 0) { $Major = CMakeVersion MAJOR }
+if ($Minor -lt 0) { $Minor = CMakeVersion MINOR }
+if ($Patch -lt 0) { $Patch = CMakeVersion PATCH }
 # Same 0-99 ceiling as mainline. Lite has no A/B seal so nothing forces it,
 # but the two boards must not develop divergent version semantics now that
 # they share a tree (study trap T5 / IMPROVEMENTS 7b).
-if ($Patch -lt 0 -or $Patch -gt 99) { throw "Patch must be 0-99" }
+if ($Patch -gt 99) { throw "Patch must be 0-99" }
 $ErrorActionPreference = "Stop"
 $root = Split-Path $PSScriptRoot -Parent
 $sdk  = "$env:USERPROFILE\.pico-sdk"

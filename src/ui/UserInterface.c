@@ -335,7 +335,10 @@ static void cart_hotplug_task(void)
         f_mount(NULL, "", 0);
         sdErrStreak = 0;
         cartSdInvalid = false;
-        uiext_vibrate_event(UIEXT_VEV_CART);  //removal cue (safe here, not in the IRQ)
+        //Removal cue (safe here, not in the IRQ). Not while the QL reads: the
+        //buzz is a blocking sleep on the loop that refills the drive buffers.
+        if(!mdInUse)
+            uiext_vibrate_event(UIEXT_VEV_CART);
     }
 
     if(cartPresent)
@@ -379,12 +382,14 @@ static void cart_hotplug_task(void)
         cartLowSinceMs = 0;
     restore_interrupts(irq_state);
 
-    if(admitted)
+    if(admitted && !mdInUse)
     {
         //Insertion-accepted signature: one short blink the moment the
         //debounce admits the cartridge. User feedback, and a bench
         //diagnostic — a blink under a dead display separates "firmware
         //never re-admitted the cartridge" from "panel failed to re-init".
+        //Skipped while the QL reads: both are blocking sleeps on the loop
+        //that refills the drive buffers.
         LED_ON(PIN_LED_ACTIVITY);
         sleep_ms(100);
         LED_OFF(PIN_LED_ACTIVITY);
